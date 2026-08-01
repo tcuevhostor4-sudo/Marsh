@@ -243,13 +243,6 @@ end
 local checkForUpdates
 
 local function toggleMenu()
-    if updateAvailable or forcedUpdateWindow.v or updateDownloading then
-        forcedUpdateWindow.v = true
-        windows.v = false
-        imgui.Process = true
-        return
-    end
-
     local opening = not windows.v
     windows.v = opening
     imgui.Process = windows.v
@@ -815,9 +808,7 @@ checkForUpdates = function(manual)
 
         updateAvailable = true
         downloadedUpdateReady = true
-        forcedUpdateWindow.v = true
-        windows.v = false
-        imgui.Process = true
+        forcedUpdateWindow.v = false
         updateStatusText = 'Найдена версия ' .. remoteVersion
 
         updateLog('Найдена новая версия ' .. remoteVersion ..
@@ -828,10 +819,6 @@ checkForUpdates = function(manual)
 end
 
 local function activationActive()
-    if updateAvailable or forcedUpdateWindow.v or updateDownloading then
-        return false
-    end
-
     if sampIsChatInputActive() or sampIsDialogActive() then
         return false
     end
@@ -963,9 +950,7 @@ function main()
         end
         activationKeyWasDown = activationKeyDown
 
-        if forcedUpdateWindow.v or updateDownloading then
-            imgui.Process = true
-        elseif not windows.v then
+        if not windows.v then
             imgui.Process = false
         end
 
@@ -1016,48 +1001,6 @@ function main()
 end
 
 function imgui.OnDrawFrame()
-    if forcedUpdateWindow.v or updateDownloading then
-        local screenX, screenY = getScreenResolution()
-        imgui.SetNextWindowPos(
-            imgui.ImVec2((screenX - 520) / 2, (screenY - 250) / 2),
-            imgui.Cond.Always
-        )
-        imgui.SetNextWindowSize(imgui.ImVec2(520, 250), imgui.Cond.Always)
-
-        local forcedFlags = imgui.WindowFlags.NoResize
-            + imgui.WindowFlags.NoCollapse
-            + imgui.WindowFlags.NoMove
-            + imgui.WindowFlags.NoSavedSettings
-
-        imgui.Begin(u8('M-AIM | ОБЯЗАТЕЛЬНОЕ ОБНОВЛЕНИЕ'), nil, forcedFlags)
-
-        imgui.Dummy(imgui.ImVec2(0, 12))
-        imgui.CenterText(u8('Доступна новая версия M-AIM'))
-
-        imgui.Dummy(imgui.ImVec2(0, 8))
-
-        if remoteVersion ~= '' then
-            imgui.CenterText(u8('Текущая версия: ' .. CURRENT_VERSION))
-            imgui.CenterText(u8('Новая версия: ' .. remoteVersion))
-        else
-            imgui.CenterText(u8('На GitHub найден обновлённый файл'))
-        end
-
-        imgui.Dummy(imgui.ImVec2(0, 10))
-        imgui.TextWrapped(u8('Обновление скачивается и устанавливается автоматически. Подождите завершения.'))
-
-        imgui.Dummy(imgui.ImVec2(0, 14))
-
-        if updateDownloading then
-            imgui.Button(u8('АВТОМАТИЧЕСКАЯ УСТАНОВКА...'), imgui.ImVec2(-1, 42))
-        else
-            imgui.Button(u8('ПОДГОТОВКА ОБНОВЛЕНИЯ...'), imgui.ImVec2(-1, 42))
-        end
-
-        imgui.End()
-        return
-    end
-
     if not windows.v then return end
 
     imgui.SetNextWindowPos(imgui.ImVec2(175.0, 135.0), imgui.Cond.FirstUseEver)
