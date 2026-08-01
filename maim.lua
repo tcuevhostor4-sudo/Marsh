@@ -8,9 +8,9 @@ local dlstatus = require('moonloader').download_status
 
 script_name('M-AIM')
 script_author('Pashenkov')
-script_version('1.2.7')
+script_version('1.2.8')
 
-local CURRENT_VERSION = '1.2.7'
+local CURRENT_VERSION = '1.2.8'
 local SCRIPT_URL = 'https://raw.githubusercontent.com/tcuevhostor4-sudo/Marsh/main/maim.lua'
 
 local cfgDir = getWorkingDirectory() .. '\\config'
@@ -240,6 +240,8 @@ local function keyName(code)
     return tostring(code)
 end
 
+local checkForUpdates
+
 local function toggleMenu()
     if updateAvailable or forcedUpdateWindow.v or updateDownloading then
         forcedUpdateWindow.v = true
@@ -248,8 +250,13 @@ local function toggleMenu()
         return
     end
 
-    windows.v = not windows.v
+    local opening = not windows.v
+    windows.v = opening
     imgui.Process = windows.v
+
+    if opening and not updateChecking and not updateDownloading then
+        checkForUpdates(false)
+    end
 end
 
 local function registerMenuCommand()
@@ -476,6 +483,15 @@ local function loadGunCfg(id)
     return true
 end
 
+local function updateLog(message)
+    message = tostring(message or '')
+    print('[M-AIM UPDATE] ' .. message)
+
+    if isSampAvailable() then
+        sampAddChatMessage('[M-AIM] ' .. message, -1)
+    end
+end
+
 local function parseVersion(version)
     local numbers = {}
     for number in tostring(version or ''):gmatch('%d+') do
@@ -559,10 +575,12 @@ local function validateScriptData(data)
         return false, 'файл слишком маленький'
     end
 
-    local lower = data:lower()
-    if lower:find('<!doctype html', 1, true)
-    or lower:find('<html', 1, true)
-    or lower:find('404: not found', 1, true) then
+    -- Проверяем только начало ответа. В самом Lua-коде могут встречаться
+    -- строки '<html' и '404: not found' внутри проверки обновлений.
+    local header = data:sub(1, 512):lower()
+    if header:find('<!doctype html', 1, true)
+    or header:find('<html', 1, true)
+    or header:find('404: not found', 1, true) then
         return false, 'GitHub вернул страницу ошибки'
     end
 
@@ -583,7 +601,6 @@ local function validateScriptData(data)
     return true
 end
 
-local checkForUpdates
 local installDownloadedUpdate
 
 installDownloadedUpdate = function()
@@ -591,6 +608,7 @@ installDownloadedUpdate = function()
 
     updateDownloading = true
     updateStatusText = 'Установка обновления...'
+    updateLog('Установка обновления началась.')
     forcedUpdateWindow.v = true
     windows.v = false
     imgui.Process = true
@@ -619,6 +637,7 @@ installDownloadedUpdate = function()
         local currentData = readBinaryFile(currentPath)
 
         if not currentData then
+            updateLog('Не удалось прочитать текущий maim.lua.')
             updateDownloading = false
             sampAddChatMessage('[M-AIM] Не удалось прочитать текущий файл.', -1)
             return
@@ -627,10 +646,13 @@ installDownloadedUpdate = function()
         os.remove(backupPath)
 
         if not writeBinaryFile(backupPath, currentData) then
+            updateLog('Не удалось создать резервную копию.')
             updateDownloading = false
             sampAddChatMessage('[M-AIM] Не удалось создать резервную копию.', -1)
             return
         end
+
+        updateLog('Запись новой версии в текущий файл.')
 
         if not writeBinaryFile(currentPath, downloadedData) then
             writeBinaryFile(currentPath, currentData)
@@ -674,7 +696,8 @@ installDownloadedUpdate = function()
             )
         end
 
-        wait(1500)
+        updateLog('Файл заменён. Перезапуск через 2 секунды.')
+        wait(2000)
         thisScript():reload()
     end)
 end
@@ -687,43 +710,46 @@ checkForUpdates = function(manual)
     updateStatusText = 'Проверка обновления...'
     os.remove(updateScriptPath)
 
+    updateLog('Проверка обновлений началась.')
+
     lua_thread.create(function()
-        local urls = {
-            SCRIPT_URL .. '?nocache=' .. tostring(os.time()),
-            SCRIPT_URL
-        }
+        local requestUrl = SCRIPT_URL .. '?nocache=' .. tostring(os.time())
+        local callbackDone = false
+        local callbackError = false
 
-        local downloaded = false
-
-        for attempt = 1, #urls do
-            local finished = false
-            local failed = false
-
-            os.remove(updateScriptPath)
-
-            downloadUrlToFile(urls[attempt], updateScriptPath, function(_, status)
-                if status == dlstatus.STATUS_ENDDOWNLOADDATA then
-                    finished = true
-                end
-            end)
-
-            local waited = 0
-            while not finished and waited < 15000 do
-                wait(100)
-                waited = waited + 100
+        downloadUrlToFile(requestUrl, updateScriptPath, function(_, status)
+            if status == dlstatus.STATUS_ENDDOWNLOADDATA
+            or status == dlstatus.STATUSEX_ENDDOWNLOAD then
+                callbackDone = true
+            elseif status == dlstatus.STATUS_ERROR
+            or status == dlstatus.STATUSEX_ERROR then
+                callbackError = true
             end
+        end)
 
-            if finished then
-                wait(500)
+        local elapsed = 0
+        local lastSize = -1
+        local stableCount = 0
 
-                local rawData = readBinaryFile(updateScriptPath)
-                local normalizedData = normalizeDownloadedSource(rawData)
+        while elapsed < 20000 and not callbackDone and not callbackError do
+            wait(250)
+            elapsed = elapsed + 250
 
-                if normalizedData and writeBinaryFile(updateScriptPath, normalizedData) then
-                    local valid = validateScriptData(normalizedData)
-                    if valid then
-                        downloaded = true
-                        break
+            local file = io.open(updateScriptPath, 'rb')
+            if file then
+                local size = file:seek('end') or 0
+                file:close()
+
+                if size > 1000 then
+                    if size == lastSize then
+                        stableCount = stableCount + 1
+                    else
+                        lastSize = size
+                        stableCount = 0
+                    end
+
+                    if stableCount >= 4 then
+                        callbackDone = true
                     end
                 end
             end
@@ -731,30 +757,51 @@ checkForUpdates = function(manual)
 
         updateChecking = false
 
-        if not downloaded then
+        if callbackError or not callbackDone then
             os.remove(updateScriptPath)
             updateAvailable = false
             downloadedUpdateReady = false
             forcedUpdateWindow.v = false
-            updateStatusText = 'Не удалось скачать обновление'
-
-            if manual and isSampAvailable() then
-                sampAddChatMessage('[M-AIM] Не удалось скачать файл с GitHub.', -1)
-            end
+            updateStatusText = 'Ошибка загрузки с GitHub'
+            updateLog('Не удалось скачать maim.lua с GitHub.')
             return
         end
 
-        local downloadedData = readBinaryFile(updateScriptPath)
-        remoteVersion = extractScriptVersion(downloadedData)
+        wait(500)
 
-        if remoteVersion == '' then
+        local rawData = readBinaryFile(updateScriptPath)
+        updateLog('Файл скачан, размер: ' .. tostring(rawData and #rawData or 0) .. ' байт.')
+
+        local normalizedData = normalizeDownloadedSource(rawData)
+        if not normalizedData then
+            os.remove(updateScriptPath)
+            updateLog('Не удалось обработать кодировку файла.')
+            return
+        end
+
+        if not writeBinaryFile(updateScriptPath, normalizedData) then
+            os.remove(updateScriptPath)
+            updateLog('Не удалось сохранить скачанный файл.')
+            return
+        end
+
+        local valid, reason = validateScriptData(normalizedData)
+        if not valid then
             os.remove(updateScriptPath)
             updateAvailable = false
             downloadedUpdateReady = false
+            forcedUpdateWindow.v = false
+            updateLog('Проверка файла не пройдена: ' .. tostring(reason))
+            return
+        end
 
-            if isSampAvailable() then
-                sampAddChatMessage('[M-AIM] В GitHub-файле не найдена версия.', -1)
-            end
+        remoteVersion = extractScriptVersion(normalizedData)
+        updateLog('Версия на GitHub: ' .. tostring(remoteVersion) ..
+            ', текущая: ' .. CURRENT_VERSION .. '.')
+
+        if remoteVersion == '' then
+            os.remove(updateScriptPath)
+            updateLog('В GitHub-файле не найдена CURRENT_VERSION.')
             return
         end
 
@@ -764,14 +811,7 @@ checkForUpdates = function(manual)
             downloadedUpdateReady = false
             forcedUpdateWindow.v = false
             updateStatusText = 'Установлена последняя версия'
-
-            if manual and isSampAvailable() then
-                sampAddChatMessage(
-                    '[M-AIM] Обновлений нет. Текущая версия: ' ..
-                    CURRENT_VERSION .. ', GitHub: ' .. remoteVersion .. '.',
-                    -1
-                )
-            end
+            updateLog('Новая версия не требуется.')
             return
         end
 
@@ -782,15 +822,10 @@ checkForUpdates = function(manual)
         imgui.Process = true
         updateStatusText = 'Найдена версия ' .. remoteVersion
 
-        if isSampAvailable() then
-            sampAddChatMessage(
-                '[M-AIM] Найдена версия ' .. remoteVersion ..
-                '. Автоматическая установка...',
-                -1
-            )
-        end
+        updateLog('Найдена новая версия ' .. remoteVersion ..
+            '. Начинается установка.')
 
-        wait(300)
+        wait(500)
         installDownloadedUpdate()
     end)
 end
@@ -891,7 +926,7 @@ function main()
 
     -- Автоматическая проверка обновлений.
     lua_thread.create(function()
-        wait(3000)
+        wait(1500)
         checkForUpdates(false)
 
         while true do
@@ -939,14 +974,7 @@ function main()
 
         local menuKeys = isKeyDown(menuKey1) and isKeyDown(menuKey2)
         if menuKeys and not menuPressed then
-            if updateAvailable or forcedUpdateWindow.v or updateDownloading then
-                forcedUpdateWindow.v = true
-                windows.v = false
-                imgui.Process = true
-            else
-                windows.v = not windows.v
-                imgui.Process = windows.v
-            end
+            toggleMenu()
         end
         menuPressed = menuKeys
 
