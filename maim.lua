@@ -7,9 +7,9 @@ local dlstatus = require('moonloader').download_status
 
 script_name('M-AIM')
 script_author('M-NaPamPah')
-script_version('1.2.13')
+script_version('1.2.14')
 
-local CURRENT_VERSION = '1.2.13'
+local CURRENT_VERSION = '1.2.14'
 local SCRIPT_URL = 'https://raw.githubusercontent.com/tcuevhostor4-sudo/Marsh/main/maim.lua'
 
 local cfgDir = getWorkingDirectory() .. '\\config'
@@ -1038,7 +1038,7 @@ function imgui.OnDrawFrame()
     imgui.SetNextWindowSize(imgui.ImVec2(1120.0, 735.0), imgui.Cond.FirstUseEver)
 
     local flags = imgui.WindowFlags.NoResize + imgui.WindowFlags.NoCollapse + imgui.WindowFlags.ShowBorders
-    imgui.Begin(u8('M-AIM  | Спасибо милфе за такой чит'), windows, flags)
+    imgui.Begin(u8('M-AIM  | Помог со скриптом Умар and Бич '), windows, flags)
 
     local holdActive = activationActive()
     local activeCount = 0
