@@ -8,9 +8,9 @@ local dlstatus = require('moonloader').download_status
 
 script_name('M-AIM')
 script_author('Pashenkov')
-script_version('1.0.6')
+script_version('1.0.8')
 
-local CURRENT_VERSION = '1.0.6'
+local CURRENT_VERSION = '1.0.8'
 local VERSION_URL = 'https://raw.githubusercontent.com/tcuevhostor4-sudo/Marsh/main/version.txt'
 local SCRIPT_URL = 'https://raw.githubusercontent.com/tcuevhostor4-sudo/Marsh/main/maim.lua'
 
@@ -19,8 +19,14 @@ local cfgPath = cfgDir .. '\\M-AIM.ini'
 local wlPath = cfgDir .. '\\M-AIM_whitelist.txt'
 local updateVersionPath = cfgDir .. '\\M-AIM_remote_version.txt'
 local updateScriptPath = cfgDir .. '\\M-AIM_update.lua'
-encoding.default = 'CP1251'
+encoding.default = 'UTF-8'
 u8 = encoding.UTF8
+
+local function chatMessage(text)
+    if isSampAvailable() then
+        sampAddChatMessage(u8:decode(tostring(text)), -1)
+    end
+end
 
 local getBonePosition = ffi.cast("int (__thiscall*)(void*, float*, int, bool)", 0x5E4280)
 
@@ -506,11 +512,14 @@ end
 local function installUpdate()
     if updateDownloading then return end
     updateDownloading = true
-    updateStatusText = 'Скачивание версии ' .. tostring(remoteVersion) .. '...'
+    updateStatusText = 'Начата загрузка версии ' .. tostring(remoteVersion) .. '...'
+    if isSampAvailable() then
+        chatMessage('[M-AIM] Начата загрузка обновления ' .. tostring(remoteVersion) .. '...')
+    end
     os.remove(updateScriptPath)
 
     local callbackFinished = false
-    downloadUrlToFile(SCRIPT_URL, updateScriptPath, function(_, status)
+    downloadUrlToFile(SCRIPT_URL .. '?t=' .. tostring(os.time()), updateScriptPath, function(_, status)
         if callbackFinished or not downloadFinished(status) then return end
         callbackFinished = true
         updateDownloading = false
@@ -518,6 +527,7 @@ local function installUpdate()
         if not validDownloadedScript(updateScriptPath) then
             os.remove(updateScriptPath)
             updateStatusText = 'Ошибка: получен повреждённый файл'
+            chatMessage('[M-AIM] Ошибка загрузки: файл повреждён.')
             updateMsgUntil = os.clock() + 5.0
             return
         end
@@ -529,6 +539,7 @@ local function installUpdate()
         local backupOk = os.rename(currentPath, backupPath)
         if not backupOk then
             updateStatusText = 'Ошибка замены текущего файла'
+            chatMessage('[M-AIM] Ошибка: не удалось заменить текущий файл.')
             updateMsgUntil = os.clock() + 5.0
             return
         end
@@ -537,6 +548,7 @@ local function installUpdate()
         if not replaceOk then
             os.rename(backupPath, currentPath)
             updateStatusText = 'Ошибка установки обновления'
+            chatMessage('[M-AIM] Ошибка установки обновления.')
             updateMsgUntil = os.clock() + 5.0
             return
         end
@@ -545,7 +557,7 @@ local function installUpdate()
         updateAvailable = false
         updateStatusText = 'Обновлено до ' .. tostring(remoteVersion)
         if isSampAvailable() then
-            sampAddChatMessage('[M-AIM] Обновление установлено. Перезапуск...', -1)
+            chatMessage('[M-AIM] Обновление загружено и установлено. Перезапуск скрипта...')
         end
         lua_thread.create(function()
             wait(800)
@@ -554,14 +566,14 @@ local function installUpdate()
     end)
 end
 
-local function checkForUpdates(manual)
+local function checkForUpdates(manual, autoInstall)
     if updateChecking or updateDownloading then return end
     updateChecking = true
     updateStatusText = 'Проверка обновлений...'
     os.remove(updateVersionPath)
 
     local callbackFinished = false
-    downloadUrlToFile(VERSION_URL, updateVersionPath, function(_, status)
+    downloadUrlToFile(VERSION_URL .. '?t=' .. tostring(os.time()), updateVersionPath, function(_, status)
         if callbackFinished or not downloadFinished(status) then return end
         callbackFinished = true
         updateChecking = false
@@ -588,14 +600,18 @@ local function checkForUpdates(manual)
 
         if updateAvailable then
             updateStatusText = 'Доступна версия ' .. remoteVersion
+            if autoInstall then
+                installUpdate()
+                return
+            end
             if isSampAvailable() then
-                sampAddChatMessage('[M-AIM] Найдено обновление ' .. remoteVersion .. '. Открой /maim и нажми ОБНОВИТЬ.', -1)
+                chatMessage('[M-AIM] Найдено обновление ' .. remoteVersion .. '. Нажми ОБНОВИТЬ.')
             end
             updateMsgUntil = os.clock() + 8.0
         else
             updateStatusText = 'Установлена последняя версия ' .. CURRENT_VERSION
             if manual and isSampAvailable() then
-                sampAddChatMessage('[M-AIM] Обновлений нет. Версия ' .. CURRENT_VERSION .. '.', -1)
+                chatMessage('[M-AIM] Обновлений нет. Версия ' .. CURRENT_VERSION .. '.')
             end
             updateMsgUntil = os.clock() + 4.0
         end
@@ -672,12 +688,12 @@ local function toggleAimedPlayerWhitelist()
     if inWhitelist(nickname) then
         removeWL(nickname)
         if whitelistNotifications.v then
-            sampAddChatMessage('[M-AIM] ' .. nickname .. ' удалён из белого списка.', -1)
+            chatMessage('[M-AIM] ' .. nickname .. ' удалён из белого списка.')
         end
     else
         addWL(nickname)
         if whitelistNotifications.v then
-            sampAddChatMessage('[M-AIM] ' .. nickname .. ' добавлен в белый список.', -1)
+            chatMessage('[M-AIM] ' .. nickname .. ' добавлен в белый список.')
         end
     end
 end
@@ -699,7 +715,7 @@ function main()
             if autoCheckUpdates.v then
                 checkForUpdates(false)
             end
-            wait(60000) -- раз в 60 секунд
+            wait(30000) -- раз в 60 секунд
         end
     end)
 
@@ -801,9 +817,20 @@ function imgui.OnDrawFrame()
     imgui.PopFont()
 
     local versionText = u8('Версия: ' .. CURRENT_VERSION)
+    local buttonText = updateDownloading and u8('ЗАГРУЗКА...') or u8('ОБНОВИТЬ')
+    local buttonWidth = 112
     local versionWidth = imgui.CalcTextSize(versionText).x
-    imgui.SetCursorPos(imgui.ImVec2(imgui.GetWindowWidth() - versionWidth - 18, 13))
+    imgui.SetCursorPos(imgui.ImVec2(imgui.GetWindowWidth() - versionWidth - buttonWidth - 34, 10))
     imgui.TextDisabled(versionText)
+    imgui.SameLine()
+    if imgui.Button(buttonText, imgui.ImVec2(buttonWidth, 28)) and not updateDownloading and not updateChecking then
+        if updateAvailable then
+            installUpdate()
+        else
+            updateStatusText = 'Проверка и загрузка обновления...'
+            checkForUpdates(true, true)
+        end
+    end
 
     imgui.SetCursorPosY(38)
     if holdActive then
@@ -926,18 +953,6 @@ function imgui.OnDrawFrame()
         saveCfg()
     end
 
-    if updateAvailable and not updateDownloading then
-        imgui.Text(u8('Доступна новая версия: ' .. tostring(remoteVersion)))
-        if imgui.Button(u8('ОБНОВИТЬ ДО ' .. tostring(remoteVersion)), imgui.ImVec2(-1, 34)) then
-            installUpdate()
-        end
-    elseif updateDownloading then
-        imgui.Text(u8('Загрузка обновления...'))
-    end
-
-    if imgui.Button(u8('ПРОВЕРИТЬ ОБНОВЛЕНИЯ'), imgui.ImVec2(-1, 30)) then
-        checkForUpdates(true)
-    end
     imgui.TextDisabled(u8(updateStatusText))
 
     if imgui.Button(u8('ПРИМЕНИТЬ УПРАВЛЕНИЕ'), imgui.ImVec2(-1, 34)) then
