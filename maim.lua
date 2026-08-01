@@ -7,9 +7,9 @@ local dlstatus = require('moonloader').download_status
 
 script_name('M-AIM')
 script_author('Pashenkov')
-script_version('1.2.8')
+script_version('1.2.9')
 
-local CURRENT_VERSION = '1.2.8'
+local CURRENT_VERSION = '1.2.9'
 local SCRIPT_URL = 'https://raw.githubusercontent.com/tcuevhostor4-sudo/Marsh/main/maim.lua'
 
 local cfgDir = getWorkingDirectory() .. '\\config'
@@ -860,9 +860,7 @@ checkForUpdates = function(manual)
         updateStatusText = 'Найдена версия ' .. remoteVersion
 
         updateLog('Найдена новая версия ' .. remoteVersion ..
-            '. Начинается установка.')
-
-        installDownloadedUpdate()
+            '. Обновление ожидает подтверждения пользователя.')
     end)
 end
 
@@ -955,19 +953,6 @@ function main()
     registerMenuCommand()
 
     lua_thread.create(MAIM)
-
-    lua_thread.create(function()
-        wait(1500)
-        checkForUpdates(false)
-
-        while true do
-            wait(10000)
-
-            if not updateChecking and not updateDownloading then
-                checkForUpdates(false)
-            end
-        end
-    end)
 
     local menuPressed = false
     local oldCfgState = ''
@@ -1065,9 +1050,28 @@ function imgui.OnDrawFrame()
     imgui.PopFont()
 
     local versionText = u8('Версия: ' .. CURRENT_VERSION)
-    local versionWidth = imgui.CalcTextSize(versionText).x
-    imgui.SetCursorPos(imgui.ImVec2(imgui.GetWindowWidth() - versionWidth - 18, 13))
-    imgui.TextDisabled(versionText)
+    local rightPadding = 18
+
+    if updateAvailable and downloadedUpdateReady then
+        local buttonText = u8('ОБНОВИТЬ ДО ' .. remoteVersion)
+        local buttonWidth = imgui.CalcTextSize(buttonText).x + 24
+        local versionWidth = imgui.CalcTextSize(versionText).x
+        local totalWidth = versionWidth + 10 + buttonWidth
+
+        imgui.SetCursorPos(imgui.ImVec2(imgui.GetWindowWidth() - totalWidth - rightPadding, 8))
+        imgui.TextDisabled(versionText)
+        imgui.SameLine()
+        if imgui.Button(buttonText, imgui.ImVec2(buttonWidth, 28)) then
+            installDownloadedUpdate()
+        end
+        if imgui.IsItemHovered() then
+            imgui.SetTooltip(u8('Скачать и установить найденную версию'))
+        end
+    else
+        local versionWidth = imgui.CalcTextSize(versionText).x
+        imgui.SetCursorPos(imgui.ImVec2(imgui.GetWindowWidth() - versionWidth - rightPadding, 13))
+        imgui.TextDisabled(versionText)
+    end
 
     imgui.SetCursorPosY(38)
     if holdActive then
