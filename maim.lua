@@ -76,11 +76,11 @@ local profileLabels = {
     [24] = 'DEAGLE [24, 31]',
     [107] = 'M4 [107, 108]',
     [103] = 'UZI [103, 104]',
-    [76] = 'БИТА [76, 5]'
+    [76] = 'ГЃГ€Г’ГЂ [76, 5]'
 }
 
 local gunCfg = {
-    -- Оставлено только для безопасного чтения старого INI.
+    -- ГЋГ±ГІГ ГўГ«ГҐГ­Г® ГІГ®Г«ГјГЄГ® Г¤Г«Гї ГЎГҐГ§Г®ГЇГ Г±Г­Г®ГЈГ® Г·ГІГҐГ­ГЁГї Г±ГІГ Г°Г®ГЈГ® INI.
     other = {
         enabled = true, speed = 10.0, dist = 20.0, fov = 15.0, aiming = 8,
         sway_enabled = false, sway_amount = 1.2, sway_speed = 2.0,
@@ -123,7 +123,7 @@ local updateDownloading = false
 local updateAvailable = false
 local downloadedUpdateReady = false
 local remoteVersion = ''
-local updateStatusText = 'Версия: ' .. CURRENT_VERSION
+local updateStatusText = 'Г‚ГҐГ°Г±ГЁГї: ' .. CURRENT_VERSION
 local updateMsgUntil = 0
 
 local windows = imgui.ImBool(false)
@@ -547,23 +547,23 @@ end
 
 local function validateSource(data)
     if not data or #data < 1000 then
-        return false, 'файл слишком маленький'
+        return false, 'ГґГ Г©Г« Г±Г«ГЁГёГЄГ®Г¬ Г¬Г Г«ГҐГ­ГјГЄГЁГ©'
     end
 
     local header = data:sub(1, 512):lower()
     if header:find('<!doctype html', 1, true)
     or header:find('<html', 1, true)
     or header:find('404: not found', 1, true) then
-        return false, 'GitHub вернул ошибку'
+        return false, 'GitHub ГўГҐГ°Г­ГіГ« Г®ГёГЁГЎГЄГі'
     end
 
     if not data:find("script_name('M-AIM')", 1, true)
     and not data:find('script_name("M-AIM")', 1, true) then
-        return false, 'скачан не M-AIM'
+        return false, 'Г±ГЄГ Г·Г Г­ Г­ГҐ M-AIM'
     end
 
     if not data:find('function main()', 1, true) then
-        return false, 'не найдена функция main'
+        return false, 'Г­ГҐ Г­Г Г©Г¤ГҐГ­Г  ГґГіГ­ГЄГ¶ГЁГї main'
     end
 
     local chunk, syntaxError = loadstring(data, '@M-AIM_update.lua')
@@ -627,7 +627,7 @@ checkForUpdates = function(manual)
         if not finished then
             os.remove(updateScriptPath)
             if manual and isSampAvailable() then
-                sampAddChatMessage('[M-AIM] Не удалось проверить обновление.', -1)
+                sampAddChatMessage('[M-AIM] ГЌГҐ ГіГ¤Г Г«Г®Г±Гј ГЇГ°Г®ГўГҐГ°ГЁГІГј Г®ГЎГ­Г®ГўГ«ГҐГ­ГЁГҐ.', -1)
             end
             return
         end
@@ -639,7 +639,7 @@ checkForUpdates = function(manual)
         if not valid then
             os.remove(updateScriptPath)
             if isSampAvailable() then
-                sampAddChatMessage('[M-AIM] Ошибка обновления: ' .. tostring(reason) .. '.', -1)
+                sampAddChatMessage('[M-AIM] ГЋГёГЁГЎГЄГ  Г®ГЎГ­Г®ГўГ«ГҐГ­ГЁГї: ' .. tostring(reason) .. '.', -1)
             end
             return
         end
@@ -656,8 +656,8 @@ checkForUpdates = function(manual)
 
         if isSampAvailable() then
             sampAddChatMessage(
-                '[M-AIM] Найдена версия ' .. remoteVersion ..
-                '. Автоматическая установка...',
+                '[M-AIM] ГЌГ Г©Г¤ГҐГ­Г  ГўГҐГ°Г±ГЁГї ' .. remoteVersion ..
+                '. ГЂГўГІГ®Г¬Г ГІГЁГ·ГҐГ±ГЄГ Гї ГіГ±ГІГ Г­Г®ГўГЄГ ...',
                 -1
             )
         end
@@ -668,7 +668,7 @@ checkForUpdates = function(manual)
         if not currentData then
             updateDownloading = false
             os.remove(updateScriptPath)
-            sampAddChatMessage('[M-AIM] Не удалось прочитать текущий файл.', -1)
+            sampAddChatMessage('[M-AIM] ГЌГҐ ГіГ¤Г Г«Г®Г±Гј ГЇГ°Г®Г·ГЁГІГ ГІГј ГІГҐГЄГіГ№ГЁГ© ГґГ Г©Г«.', -1)
             return
         end
 
@@ -676,7 +676,7 @@ checkForUpdates = function(manual)
             writeFile(currentPath, currentData)
             updateDownloading = false
             os.remove(updateScriptPath)
-            sampAddChatMessage('[M-AIM] Ошибка записи обновления.', -1)
+            sampAddChatMessage('[M-AIM] ГЋГёГЁГЎГЄГ  Г§Г ГЇГЁГ±ГЁ Г®ГЎГ­Г®ГўГ«ГҐГ­ГЁГї.', -1)
             return
         end
 
@@ -687,7 +687,7 @@ checkForUpdates = function(manual)
             writeFile(currentPath, currentData)
             updateDownloading = false
             os.remove(updateScriptPath)
-            sampAddChatMessage('[M-AIM] Старый файл восстановлен.', -1)
+            sampAddChatMessage('[M-AIM] Г‘ГІГ Г°Г»Г© ГґГ Г©Г« ГўГ®Г±Г±ГІГ Г­Г®ГўГ«ГҐГ­.', -1)
             return
         end
 
@@ -696,8 +696,8 @@ checkForUpdates = function(manual)
 
         if isSampAvailable() then
             sampAddChatMessage(
-                '[M-AIM] Обновлено до версии ' .. remoteVersion ..
-                '. Перезапуск...',
+                '[M-AIM] ГЋГЎГ­Г®ГўГ«ГҐГ­Г® Г¤Г® ГўГҐГ°Г±ГЁГЁ ' .. remoteVersion ..
+                '. ГЏГҐГ°ГҐГ§Г ГЇГіГ±ГЄ...',
                 -1
             )
         end
@@ -777,12 +777,12 @@ local function toggleAimedPlayerWhitelist()
     if inWhitelist(nickname) then
         removeWL(nickname)
         if whitelistNotifications.v then
-            sampAddChatMessage('[M-AIM] ' .. nickname .. ' удалён из белого списка.', -1)
+            sampAddChatMessage('[M-AIM] ' .. nickname .. ' ГіГ¤Г Г«ВёГ­ ГЁГ§ ГЎГҐГ«Г®ГЈГ® Г±ГЇГЁГ±ГЄГ .', -1)
         end
     else
         addWL(nickname)
         if whitelistNotifications.v then
-            sampAddChatMessage('[M-AIM] ' .. nickname .. ' добавлен в белый список.', -1)
+            sampAddChatMessage('[M-AIM] ' .. nickname .. ' Г¤Г®ГЎГ ГўГ«ГҐГ­ Гў ГЎГҐГ«Г»Г© Г±ГЇГЁГ±Г®ГЄ.', -1)
         end
     end
 end
@@ -797,7 +797,7 @@ function main()
 
     lua_thread.create(MAIM)
 
-    -- Удаляем старые временные файлы от предыдущих версий обновления.
+    -- Г“Г¤Г Г«ГїГҐГ¬ Г±ГІГ Г°Г»ГҐ ГўГ°ГҐГ¬ГҐГ­Г­Г»ГҐ ГґГ Г©Г«Г» Г®ГІ ГЇГ°ГҐГ¤Г»Г¤ГіГ№ГЁГµ ГўГҐГ°Г±ГЁГ© Г®ГЎГ­Г®ГўГ«ГҐГ­ГЁГї.
     os.remove(updateScriptPath)
     os.remove(thisScript().path .. '.bak')
     os.remove(cfgDir .. '\\M-AIM_cleanup_backup.flag')
@@ -886,8 +886,8 @@ function main()
         }, '|')
 
         if cfgState ~= oldCfgState then
-            -- Не записываем настройки наведения в профиль автоматически.
-            -- Профиль сохраняется только кнопкой «СОХРАНИТЬ ПРОФИЛЬ».
+            -- ГЌГҐ Г§Г ГЇГЁГ±Г»ГўГ ГҐГ¬ Г­Г Г±ГІГ°Г®Г©ГЄГЁ Г­Г ГўГҐГ¤ГҐГ­ГЁГї Гў ГЇГ°Г®ГґГЁГ«Гј Г ГўГІГ®Г¬Г ГІГЁГ·ГҐГ±ГЄГЁ.
+            -- ГЏГ°Г®ГґГЁГ«Гј Г±Г®ГµГ°Г Г­ГїГҐГІГ±Гї ГІГ®Г«ГјГЄГ® ГЄГ­Г®ГЇГЄГ®Г© В«Г‘ГЋГ•ГђГЂГЌГ€Г’Гњ ГЏГђГЋГ”Г€Г‹ГњВ».
             oldCfgState = cfgState
         end
     end
@@ -900,7 +900,7 @@ function imgui.OnDrawFrame()
     imgui.SetNextWindowSize(imgui.ImVec2(980.0, 690.0), imgui.Cond.FirstUseEver)
 
     local flags = imgui.WindowFlags.NoResize + imgui.WindowFlags.NoCollapse + imgui.WindowFlags.ShowBorders
-    imgui.Begin(u8('M-AIM  |  НОВОЕ'), windows, flags)
+    imgui.Begin(u8('M-AIM  |  ГЌГЋГ‚ГЋГ…'), windows, flags)
 
     local holdActive = activationActive()
     local activeCount = 0
@@ -911,64 +911,64 @@ function imgui.OnDrawFrame()
     imgui.Text(u8('M-AIM'))
     imgui.PopFont()
 
-    local versionText = u8('Версия: ' .. CURRENT_VERSION)
+    local versionText = u8('Г‚ГҐГ°Г±ГЁГї: ' .. CURRENT_VERSION)
     local versionWidth = imgui.CalcTextSize(versionText).x
     imgui.SetCursorPos(imgui.ImVec2(imgui.GetWindowWidth() - versionWidth - 18, 13))
     imgui.TextDisabled(versionText)
 
     imgui.SetCursorPosY(38)
     if holdActive then
-        imgui.Text(u8('АКТИВЕН'))
+        imgui.Text(u8('ГЂГЉГ’Г€Г‚Г…ГЌ'))
     else
         if activationToggleMode.v then
-            imgui.TextDisabled(u8('НАЖМИ ' .. keyName(holdKey) .. ' ДЛЯ ВКЛ/ВЫКЛ'))
+            imgui.TextDisabled(u8('ГЌГЂГ†ГЊГ€ ' .. keyName(holdKey) .. ' Г„Г‹Гџ Г‚ГЉГ‹/Г‚Г›ГЉГ‹'))
         else
-            imgui.TextDisabled(u8('УДЕРЖИВАЙ ' .. keyName(holdKey)))
+            imgui.TextDisabled(u8('Г“Г„Г…ГђГ†Г€Г‚ГЂГ‰ ' .. keyName(holdKey)))
         end
     end
     imgui.SameLine(240)
-    imgui.TextDisabled(u8(keyName(menuKey1) .. ' + ' .. keyName(menuKey2) .. ' — меню'))
+    imgui.TextDisabled(u8(keyName(menuKey1) .. ' + ' .. keyName(menuKey2) .. ' В— Г¬ГҐГ­Гѕ'))
     imgui.SameLine(430)
-    imgui.TextDisabled(u8('/' .. chatCommand .. ' — команда'))
+    imgui.TextDisabled(u8('/' .. chatCommand .. ' В— ГЄГ®Г¬Г Г­Г¤Г '))
     imgui.SameLine(710)
-    imgui.TextDisabled(u8('Белый список: ') .. tostring(activeCount))
+    imgui.TextDisabled(u8('ГЃГҐГ«Г»Г© Г±ГЇГЁГ±Г®ГЄ: ') .. tostring(activeCount))
     imgui.EndChild()
 
     imgui.Dummy(imgui.ImVec2(0, 8))
 
     imgui.BeginChild('Left', imgui.ImVec2(305, 500), true)
-    imgui.Text(u8('НАВЕДЕНИЕ'))
+    imgui.Text(u8('ГЌГЂГ‚Г…Г„Г…ГЌГ€Г…'))
     imgui.Separator()
     imgui.Dummy(imgui.ImVec2(0, 8))
 
     imgui.PushItemWidth(185.0)
-    imgui.SliderFloat(u8('Скорость##speed'), Speed, 1.0, 50.0, '%.1f')
-    imgui.SliderFloat(u8('Дистанция##dist'), Dist, 1.0, 100.0, '%.1f')
-    imgui.SliderFloat(u8('Угол обзора##fov'), Fov, 1.0, 100.0, '%.1f')
+    imgui.SliderFloat(u8('Г‘ГЄГ®Г°Г®Г±ГІГј##speed'), Speed, 1.0, 50.0, '%.1f')
+    imgui.SliderFloat(u8('Г„ГЁГ±ГІГ Г­Г¶ГЁГї##dist'), Dist, 1.0, 100.0, '%.1f')
+    imgui.SliderFloat(u8('Г“ГЈГ®Г« Г®ГЎГ§Г®Г°Г ##fov'), Fov, 1.0, 100.0, '%.1f')
     imgui.PopItemWidth()
 
     imgui.Dummy(imgui.ImVec2(0, 12))
-    imgui.Text(u8('ТОЧКА'))
+    imgui.Text(u8('Г’ГЋГ—ГЉГЂ'))
     imgui.Separator()
-    if imgui.Checkbox(u8('Голова'), cbz1) and cbz1.v then setAimingCheckboxes(8) end
+    if imgui.Checkbox(u8('ГѓГ®Г«Г®ГўГ '), cbz1) and cbz1.v then setAimingCheckboxes(8) end
     imgui.SameLine(150)
-    if imgui.Checkbox(u8('Торс'), cbz2) and cbz2.v then setAimingCheckboxes(3) end
-    if imgui.Checkbox(u8('Стопа'), cbz3) and cbz3.v then setAimingCheckboxes(42) end
+    if imgui.Checkbox(u8('Г’Г®Г°Г±'), cbz2) and cbz2.v then setAimingCheckboxes(3) end
+    if imgui.Checkbox(u8('Г‘ГІГ®ГЇГ '), cbz3) and cbz3.v then setAimingCheckboxes(42) end
     imgui.SameLine(150)
-    if imgui.Checkbox(u8('Нога'), cbz4) and cbz4.v then setAimingCheckboxes(54) end
-    if imgui.Checkbox(u8('Ближайшая точка'), cbz9) and cbz9.v then setAimingCheckboxes(-1) end
+    if imgui.Checkbox(u8('ГЌГ®ГЈГ '), cbz4) and cbz4.v then setAimingCheckboxes(54) end
+    if imgui.Checkbox(u8('ГЃГ«ГЁГ¦Г Г©ГёГ Гї ГІГ®Г·ГЄГ '), cbz9) and cbz9.v then setAimingCheckboxes(-1) end
 
     imgui.Dummy(imgui.ImVec2(0, 12))
-    imgui.Text(u8('ДОПОЛНИТЕЛЬНО'))
+    imgui.Text(u8('Г„ГЋГЏГЋГ‹ГЌГ€Г’Г…Г‹ГњГЌГЋ'))
     imgui.Separator()
-    imgui.Checkbox(u8('Плавное смещение'), cbz6)
-    imgui.Checkbox(u8('Проверка стен'), cbz7)
-    imgui.Checkbox(u8('Игнорировать анимацию 1151'), cbz8)
+    imgui.Checkbox(u8('ГЏГ«Г ГўГ­Г®ГҐ Г±Г¬ГҐГ№ГҐГ­ГЁГҐ'), cbz6)
+    imgui.Checkbox(u8('ГЏГ°Г®ГўГҐГ°ГЄГ  Г±ГІГҐГ­'), cbz7)
+    imgui.Checkbox(u8('Г€ГЈГ­Г®Г°ГЁГ°Г®ГўГ ГІГј Г Г­ГЁГ¬Г Г¶ГЁГѕ 1151'), cbz8)
 
     if cbz6.v then
         imgui.PushItemWidth(185.0)
-        imgui.SliderFloat(u8('Размах##swayamount'), SwayAmount, 0.1, 5.0, '%.1f')
-        imgui.SliderFloat(u8('Темп##swayspeed'), SwaySpeed, 0.2, 8.0, '%.1f')
+        imgui.SliderFloat(u8('ГђГ Г§Г¬Г Гµ##swayamount'), SwayAmount, 0.1, 5.0, '%.1f')
+        imgui.SliderFloat(u8('Г’ГҐГ¬ГЇ##swayspeed'), SwaySpeed, 0.2, 8.0, '%.1f')
         imgui.PopItemWidth()
     end
     imgui.EndChild()
@@ -976,13 +976,13 @@ function imgui.OnDrawFrame()
     imgui.SameLine()
 
     imgui.BeginChild('Center', imgui.ImVec2(300, 500), true)
-    imgui.Text(u8('ПРОФИЛИ ОРУЖИЯ'))
+    imgui.Text(u8('ГЏГђГЋГ”Г€Г‹Г€ ГЋГђГ“Г†Г€Гџ'))
     imgui.Separator()
-    imgui.TextDisabled(u8('Активный: ') .. u8(profileName))
+    imgui.TextDisabled(u8('ГЂГЄГІГЁГўГ­Г»Г©: ') .. u8(profileName))
     imgui.Dummy(imgui.ImVec2(0, 8))
-    imgui.Checkbox(u8('Аим включён для профиля'), aimEnabled)
-    imgui.Checkbox(u8('Стрелять в ближайшего'), nearestTargetEnabled)
-    imgui.Checkbox(u8('Стрелять ликвид'), liquidTargetEnabled)
+    imgui.Checkbox(u8('ГЂГЁГ¬ ГўГЄГ«ГѕГ·ВёГ­ Г¤Г«Гї ГЇГ°Г®ГґГЁГ«Гї'), aimEnabled)
+    imgui.Checkbox(u8('Г‘ГІГ°ГҐГ«ГїГІГј Гў ГЎГ«ГЁГ¦Г Г©ГёГҐГЈГ®'), nearestTargetEnabled)
+    imgui.Checkbox(u8('Г‘ГІГ°ГҐГ«ГїГІГј Г«ГЁГЄГўГЁГ¤'), liquidTargetEnabled)
     imgui.Dummy(imgui.ImVec2(0, 6))
 
     if imgui.Button(u8('DEAGLE  24/31'), imgui.ImVec2(134, 34)) then
@@ -1002,42 +1002,42 @@ function imgui.OnDrawFrame()
         loadGunCfg(103)
     end
     imgui.SameLine()
-    if imgui.Button(u8('БИТА  76/5'), imgui.ImVec2(134, 34)) then
+    if imgui.Button(u8('ГЃГ€Г’ГЂ  76/5'), imgui.ImVec2(134, 34)) then
         editProfile = 76
         profileName = profileLabels[76]
         loadGunCfg(76)
     end
     imgui.Dummy(imgui.ImVec2(0, 8))
-    if imgui.Button(u8('СОХРАНИТЬ ПРОФИЛЬ'), imgui.ImVec2(-1, 36)) then
+    if imgui.Button(u8('Г‘ГЋГ•ГђГЂГЌГ€Г’Гњ ГЏГђГЋГ”Г€Г‹Гњ'), imgui.ImVec2(-1, 36)) then
         saveGunCfg(editProfile)
     end
 
     if os.clock() < saveMsgUntil then
-        imgui.Text(u8('Настройки сохранены'))
+        imgui.Text(u8('ГЌГ Г±ГІГ°Г®Г©ГЄГЁ Г±Г®ГµГ°Г Г­ГҐГ­Г»'))
     else
-        imgui.TextDisabled(u8('Аим работает только на указанных ID оружия.'))
+        imgui.TextDisabled(u8('ГЂГЁГ¬ Г°Г ГЎГ®ГІГ ГҐГІ ГІГ®Г«ГјГЄГ® Г­Г  ГіГЄГ Г§Г Г­Г­Г»Гµ ID Г®Г°ГіГ¦ГЁГї.'))
     end
 
     imgui.Dummy(imgui.ImVec2(0, 12))
-    imgui.Text(u8('УПРАВЛЕНИЕ'))
+    imgui.Text(u8('Г“ГЏГђГЂГ‚Г‹Г…ГЌГ€Г…'))
     imgui.Separator()
     imgui.PushItemWidth(145)
-    imgui.InputText(u8('Команда##cmd'), commandInput)
-    imgui.InputText(u8('Активация##hold'), holdKeyInput)
-    if imgui.Checkbox(u8('Включать по нажатию'), activationToggleMode) then
+    imgui.InputText(u8('ГЉГ®Г¬Г Г­Г¤Г ##cmd'), commandInput)
+    imgui.InputText(u8('ГЂГЄГІГЁГўГ Г¶ГЁГї##hold'), holdKeyInput)
+    if imgui.Checkbox(u8('Г‚ГЄГ«ГѕГ·Г ГІГј ГЇГ® Г­Г Г¦Г ГІГЁГѕ'), activationToggleMode) then
         activationToggled = false
     end
-    imgui.InputText(u8('Меню 1##menu1'), menuKey1Input)
-    imgui.InputText(u8('Меню 2##menu2'), menuKey2Input)
-    imgui.InputText(u8('Сброс ликвид##liquidreset'), liquidResetKeyInput)
-    imgui.InputText(u8('Белый список##whitelisttoggle'), whitelistToggleKeyInput)
+    imgui.InputText(u8('ГЊГҐГ­Гѕ 1##menu1'), menuKey1Input)
+    imgui.InputText(u8('ГЊГҐГ­Гѕ 2##menu2'), menuKey2Input)
+    imgui.InputText(u8('Г‘ГЎГ°Г®Г± Г«ГЁГЄГўГЁГ¤##liquidreset'), liquidResetKeyInput)
+    imgui.InputText(u8('ГЃГҐГ«Г»Г© Г±ГЇГЁГ±Г®ГЄ##whitelisttoggle'), whitelistToggleKeyInput)
     imgui.PopItemWidth()
-    imgui.Checkbox(u8('Уведомления белого списка'), whitelistNotifications)
-    if imgui.Checkbox(u8('Проверять обновления при запуске'), autoCheckUpdates) then
+    imgui.Checkbox(u8('Г“ГўГҐГ¤Г®Г¬Г«ГҐГ­ГЁГї ГЎГҐГ«Г®ГЈГ® Г±ГЇГЁГ±ГЄГ '), whitelistNotifications)
+    if imgui.Checkbox(u8('ГЏГ°Г®ГўГҐГ°ГїГІГј Г®ГЎГ­Г®ГўГ«ГҐГ­ГЁГї ГЇГ°ГЁ Г§Г ГЇГіГ±ГЄГҐ'), autoCheckUpdates) then
         saveCfg()
     end
 
-    if imgui.Button(u8('ПРИМЕНИТЬ УПРАВЛЕНИЕ'), imgui.ImVec2(-1, 34)) then
+    if imgui.Button(u8('ГЏГђГ€ГЊГ…ГЌГ€Г’Гњ Г“ГЏГђГЂГ‚Г‹Г…ГЌГ€Г…'), imgui.ImVec2(-1, 34)) then
         chatCommand = trim(u8:decode(commandInput.v)):gsub('^/', ''):lower()
         if chatCommand == '' then chatCommand = 'maim' end
         holdKey = keyCode(u8:decode(holdKeyInput.v), holdKey)
@@ -1057,16 +1057,16 @@ function imgui.OnDrawFrame()
     end
 
     if os.clock() < controlMsgUntil then
-        imgui.Text(u8('Управление сохранено'))
+        imgui.Text(u8('Г“ГЇГ°Г ГўГ«ГҐГ­ГЁГҐ Г±Г®ГµГ°Г Г­ГҐГ­Г®'))
     else
-        imgui.TextDisabled(u8('Пример клавиш: Q, 1, F5, SHIFT'))
+        imgui.TextDisabled(u8('ГЏГ°ГЁГ¬ГҐГ° ГЄГ«Г ГўГЁГё: Q, 1, F5, SHIFT'))
     end
     imgui.EndChild()
 
     imgui.SameLine()
 
     imgui.BeginChild('Right', imgui.ImVec2(0, 500), true)
-    imgui.Text(u8('БЕЛЫЙ СПИСОК'))
+    imgui.Text(u8('ГЃГ…Г‹Г›Г‰ Г‘ГЏГ€Г‘ГЋГЉ'))
     imgui.SameLine(210)
     imgui.TextDisabled(tostring(activeCount))
     imgui.Separator()
@@ -1089,7 +1089,7 @@ function imgui.OnDrawFrame()
 
     if #names == 0 then
         imgui.Dummy(imgui.ImVec2(0, 145))
-        imgui.CenterText(u8('СПИСОК ПУСТ'))
+        imgui.CenterText(u8('Г‘ГЏГ€Г‘ГЋГЉ ГЏГ“Г‘Г’'))
     else
         for index, name in ipairs(names) do
             imgui.Text(u8(name))
@@ -1103,11 +1103,11 @@ function imgui.OnDrawFrame()
     imgui.EndChild()
 
     imgui.Dummy(imgui.ImVec2(0, 8))
-    imgui.TextDisabled(u8('Игроки из списка полностью игнорируются.'))
+    imgui.TextDisabled(u8('Г€ГЈГ°Г®ГЄГЁ ГЁГ§ Г±ГЇГЁГ±ГЄГ  ГЇГ®Г«Г­Г®Г±ГІГјГѕ ГЁГЈГ­Г®Г°ГЁГ°ГіГѕГІГ±Гї.'))
     imgui.EndChild()
 
     imgui.Separator()
-    local authorText = u8('Автор: @pashenkov тг')
+    local authorText = u8('ГЂГўГІГ®Г°: @pashenkov ГІГЈ')
     local authorWidth = imgui.CalcTextSize(authorText).x
     imgui.SetCursorPosX((imgui.GetWindowWidth() - authorWidth) / 2)
     imgui.Text(authorText)
@@ -1115,7 +1115,7 @@ function imgui.OnDrawFrame()
         os.execute('start "" "https://t.me/pashenkov"')
     end
     if imgui.IsItemHovered() then
-        imgui.SetTooltip(u8('Открыть Telegram'))
+        imgui.SetTooltip(u8('ГЋГІГЄГ°Г»ГІГј Telegram'))
     end
 
     imgui.End()
@@ -1221,8 +1221,8 @@ local function getNearestPed(cfg)
                             local worldDistance = math.sqrt((enX - myX) ^ 2 + (enY - myY) ^ 2 + (enZ - myZ) ^ 2)
 
                             if worldDistance <= cfg.dist then
-                                -- Для каждого профиля оружия отдельно:
-                                -- true = ближайший по дистанции, false = ближайший к прицелу.
+                                -- Г„Г«Гї ГЄГ Г¦Г¤Г®ГЈГ® ГЇГ°Г®ГґГЁГ«Гї Г®Г°ГіГ¦ГЁГї Г®ГІГ¤ГҐГ«ГјГ­Г®:
+                                -- true = ГЎГ«ГЁГ¦Г Г©ГёГЁГ© ГЇГ® Г¤ГЁГ±ГІГ Г­Г¶ГЁГЁ, false = ГЎГ«ГЁГ¦Г Г©ГёГЁГ© ГЄ ГЇГ°ГЁГ¶ГҐГ«Гі.
                                 local metric = cfg.nearest_target_enabled and worldDistance or screenDistance
                                 if metric < bestMetric then
                                     nearestPED = handle
