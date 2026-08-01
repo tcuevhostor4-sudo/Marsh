@@ -8,9 +8,9 @@ local dlstatus = require('moonloader').download_status
 
 script_name('M-AIM')
 script_author('Pashenkov')
-script_version('1.2.8')
+script_version('1.2.6')
 
-local CURRENT_VERSION = '1.2.8'
+local CURRENT_VERSION = '1.2.6'
 local SCRIPT_URL = 'https://raw.githubusercontent.com/tcuevhostor4-sudo/Marsh/main/maim.lua'
 
 local cfgDir = getWorkingDirectory() .. '\\config'
@@ -713,7 +713,7 @@ checkForUpdates = function(manual)
     updateLog('Проверка обновлений началась.')
 
     lua_thread.create(function()
-        local requestUrl = SCRIPT_URL .. '?nocache=' .. tostring(os.time())
+        local requestUrl = SCRIPT_URL .. '?nocache=' .. tostring(os.time()) .. tostring(math.floor(os.clock() * 1000))
         local callbackDone = false
         local callbackError = false
 
@@ -731,9 +731,9 @@ checkForUpdates = function(manual)
         local lastSize = -1
         local stableCount = 0
 
-        while elapsed < 20000 and not callbackDone and not callbackError do
-            wait(250)
-            elapsed = elapsed + 250
+        while elapsed < 10000 and not callbackDone and not callbackError do
+            wait(100)
+            elapsed = elapsed + 100
 
             local file = io.open(updateScriptPath, 'rb')
             if file then
@@ -748,7 +748,7 @@ checkForUpdates = function(manual)
                         stableCount = 0
                     end
 
-                    if stableCount >= 4 then
+                    if stableCount >= 2 then
                         callbackDone = true
                     end
                 end
@@ -766,8 +766,6 @@ checkForUpdates = function(manual)
             updateLog('Не удалось скачать maim.lua с GitHub.')
             return
         end
-
-        wait(500)
 
         local rawData = readBinaryFile(updateScriptPath)
         updateLog('Файл скачан, размер: ' .. tostring(rawData and #rawData or 0) .. ' байт.')
@@ -825,7 +823,6 @@ checkForUpdates = function(manual)
         updateLog('Найдена новая версия ' .. remoteVersion ..
             '. Начинается установка.')
 
-        wait(500)
         installDownloadedUpdate()
     end)
 end
@@ -930,7 +927,7 @@ function main()
         checkForUpdates(false)
 
         while true do
-            wait(30000)
+            wait(10000)
 
             if not updateChecking and not updateDownloading then
                 checkForUpdates(false)
