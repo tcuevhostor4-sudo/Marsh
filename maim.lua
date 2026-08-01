@@ -8,9 +8,9 @@ local dlstatus = require('moonloader').download_status
 
 script_name('M-AIM')
 script_author('Pashenkov')
-script_version('1.0.5')
+script_version('1.0.9')
 
-local CURRENT_VERSION = '1.0.5'
+local CURRENT_VERSION = '1.0.9'
 local SCRIPT_URL = 'https://raw.githubusercontent.com/tcuevhostor4-sudo/Marsh/main/maim.lua'
 
 local cfgDir = getWorkingDirectory() .. '\\config'
