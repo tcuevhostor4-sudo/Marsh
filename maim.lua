@@ -76,11 +76,11 @@ local profileLabels = {
     [24] = 'DEAGLE [24, 31]',
     [107] = 'M4 [107, 108]',
     [103] = 'UZI [103, 104]',
-    [76] = 'ÁÈÒÀ [76, 5]'
+    [76] = 'БИТА [76, 5]'
 }
 
 local gunCfg = {
-    -- Îñòàâëåíî òîëüêî äëÿ áåçîïàñíîãî ÷òåíèÿ ñòàðîãî INI.
+    -- Оставлено только для безопасного чтения старого INI.
     other = {
         enabled = true, speed = 10.0, dist = 20.0, fov = 15.0, aiming = 8,
         sway_enabled = false, sway_amount = 1.2, sway_speed = 2.0,
@@ -123,7 +123,7 @@ local updateDownloading = false
 local updateAvailable = false
 local downloadedUpdateReady = false
 local remoteVersion = ''
-local updateStatusText = 'Âåðñèÿ: ' .. CURRENT_VERSION
+local updateStatusText = 'Версия: ' .. CURRENT_VERSION
 local updateMsgUntil = 0
 
 local windows = imgui.ImBool(false)
@@ -476,12 +476,21 @@ local function loadGunCfg(id)
     return true
 end
 
-local function parseVersion(version)
-    local parts = {}
-    for number in tostring(version or ''):gmatch('%d+') do
-        parts[#parts + 1] = tonumber(number) or 0
+local function updateLog(message)
+    message = tostring(message or '')
+    print('[M-AIM UPDATE] ' .. message)
+
+    if isSampAvailable() then
+        sampAddChatMessage('[M-AIM] ' .. message, -1)
     end
-    return parts
+end
+
+local function parseVersion(version)
+    local numbers = {}
+    for number in tostring(version or ''):gmatch('%d+') do
+        numbers[#numbers + 1] = tonumber(number) or 0
+    end
+    return numbers
 end
 
 local function isVersionNewer(remote, current)
@@ -500,107 +509,261 @@ local function isVersionNewer(remote, current)
     return false
 end
 
-local function readFile(path)
+local function readBinaryFile(path)
     local file = io.open(path, 'rb')
     if not file then return nil end
+
     local data = file:read('*a') or ''
     file:close()
     return data
 end
 
-local function writeFile(path, data)
+local function writeBinaryFile(path, data)
     local file = io.open(path, 'wb')
     if not file then return false end
+
     local ok = file:write(data)
     file:flush()
     file:close()
     return ok ~= nil
 end
 
-local function extractVersion(data)
+local function extractScriptVersion(data)
     if not data then return '' end
 
     local version = data:match("local%s+CURRENT_VERSION%s*=%s*['\"]([^'\"]+)['\"]")
     if version and version ~= '' then return trim(version) end
 
-    return data:match("script_version%s*%(%s*['\"]([^'\"]+)['\"]%s*%)") or ''
+    version = data:match("script_version%s*%(%s*['\"]([^'\"]+)['\"]%s*%)")
+    if version and version ~= '' then return trim(version) end
+
+    return ''
 end
 
-local function normalizeSource(data)
+local function isValidUtf8(data)
+    local i = 1
+
+    while i <= #data do
+        local b1 = data:byte(i)
+
+        if b1 <= 0x7F then
+            i = i + 1
+        elseif b1 >= 0xC2 and b1 <= 0xDF then
+            local b2 = data:byte(i + 1)
+            if not b2 or b2 < 0x80 or b2 > 0xBF then return false end
+            i = i + 2
+        elseif b1 >= 0xE0 and b1 <= 0xEF then
+            local b2, b3 = data:byte(i + 1), data:byte(i + 2)
+            if not b2 or not b3
+            or b2 < 0x80 or b2 > 0xBF
+            or b3 < 0x80 or b3 > 0xBF then
+                return false
+            end
+            i = i + 3
+        elseif b1 >= 0xF0 and b1 <= 0xF4 then
+            local b2, b3, b4 = data:byte(i + 1), data:byte(i + 2), data:byte(i + 3)
+            if not b2 or not b3 or not b4
+            or b2 < 0x80 or b2 > 0xBF
+            or b3 < 0x80 or b3 > 0xBF
+            or b4 < 0x80 or b4 > 0xBF then
+                return false
+            end
+            i = i + 4
+        else
+            return false
+        end
+    end
+
+    return true
+end
+
+local function normalizeDownloadedSource(data)
     if not data or data == '' then return nil end
 
     if data:sub(1, 3) == '\239\187\191' then
         data = data:sub(4)
     end
 
-    local ok, converted = pcall(function()
-        return u8:decode(data)
-    end)
+    -- Конвертируем только настоящий UTF-8.
+    -- Windows-1251 оставляем без изменений.
+    if isValidUtf8(data) then
+        local ok, converted = pcall(function()
+            return u8:decode(data)
+        end)
 
-    if ok and converted
-    and converted:find("script_name('M-AIM')", 1, true) then
-        return converted
+        if ok and converted
+        and converted:find("script_name('M-AIM')", 1, true) then
+            return converted
+        end
     end
 
     return data
 end
 
-local function validateSource(data)
+local function validateScriptData(data)
     if not data or #data < 1000 then
-        return false, 'ôàéë ñëèøêîì ìàëåíüêèé'
+        return false, 'файл слишком маленький'
     end
 
+    -- Проверяем только начало ответа. В самом Lua-коде могут встречаться
+    -- строки '<html' и '404: not found' внутри проверки обновлений.
     local header = data:sub(1, 512):lower()
     if header:find('<!doctype html', 1, true)
     or header:find('<html', 1, true)
     or header:find('404: not found', 1, true) then
-        return false, 'GitHub âåðíóë îøèáêó'
+        return false, 'GitHub вернул страницу ошибки'
     end
 
     if not data:find("script_name('M-AIM')", 1, true)
     and not data:find('script_name("M-AIM")', 1, true) then
-        return false, 'ñêà÷àí íå M-AIM'
+        return false, 'скачан не M-AIM'
     end
 
     if not data:find('function main()', 1, true) then
-        return false, 'íå íàéäåíà ôóíêöèÿ main'
+        return false, 'не найдена функция main'
     end
 
     local chunk, syntaxError = loadstring(data, '@M-AIM_update.lua')
     if not chunk then
-        return false, tostring(syntaxError)
+        return false, 'ошибка Lua: ' .. tostring(syntaxError)
     end
 
     return true
+end
+
+local installDownloadedUpdate
+
+installDownloadedUpdate = function()
+    if updateDownloading or not downloadedUpdateReady then return end
+
+    updateDownloading = true
+    updateStatusText = 'Установка обновления...'
+    updateLog('Установка обновления началась.')
+    forcedUpdateWindow.v = true
+    windows.v = false
+    imgui.Process = true
+
+    lua_thread.create(function()
+        wait(200)
+
+        local downloadedData = readBinaryFile(updateScriptPath)
+        local valid, reason = validateScriptData(downloadedData)
+
+        if not valid then
+            updateDownloading = false
+            downloadedUpdateReady = false
+            updateAvailable = false
+            forcedUpdateWindow.v = false
+            os.remove(updateScriptPath)
+
+            if isSampAvailable() then
+                sampAddChatMessage('[M-AIM] Обновление отменено: ' .. tostring(reason) .. '.', -1)
+            end
+            return
+        end
+
+        local currentPath = thisScript().path
+        local backupPath = currentPath .. '.bak'
+        local currentData = readBinaryFile(currentPath)
+
+        if not currentData then
+            updateLog('Не удалось прочитать текущий maim.lua.')
+            updateDownloading = false
+            sampAddChatMessage('[M-AIM] Не удалось прочитать текущий файл.', -1)
+            return
+        end
+
+        os.remove(backupPath)
+
+        if not writeBinaryFile(backupPath, currentData) then
+            updateLog('Не удалось создать резервную копию.')
+            updateDownloading = false
+            sampAddChatMessage('[M-AIM] Не удалось создать резервную копию.', -1)
+            return
+        end
+
+        updateLog('Запись новой версии в текущий файл.')
+
+        if not writeBinaryFile(currentPath, downloadedData) then
+            writeBinaryFile(currentPath, currentData)
+            updateDownloading = false
+            sampAddChatMessage('[M-AIM] Ошибка записи. Старый файл восстановлен.', -1)
+            return
+        end
+
+        local installedData = readBinaryFile(currentPath)
+        local installedOk, installedReason = validateScriptData(installedData)
+
+        if not installedOk then
+            writeBinaryFile(currentPath, currentData)
+            updateDownloading = false
+            updateAvailable = false
+            downloadedUpdateReady = false
+            forcedUpdateWindow.v = false
+
+            sampAddChatMessage(
+                '[M-AIM] Новая версия не прошла проверку: ' ..
+                tostring(installedReason) .. '. Старый файл восстановлен.',
+                -1
+            )
+            return
+        end
+
+        os.remove(updateScriptPath)
+
+        updateDownloading = false
+        updateAvailable = false
+        downloadedUpdateReady = false
+        forcedUpdateWindow.v = false
+        windows.v = false
+        imgui.Process = false
+
+        if isSampAvailable() then
+            sampAddChatMessage(
+                '[M-AIM] Обновление до версии ' .. tostring(remoteVersion) ..
+                ' установлено. Перезапуск...',
+                -1
+            )
+        end
+
+        updateLog('Файл заменён. Перезапуск через 2 секунды.')
+        wait(2000)
+        thisScript():reload()
+    end)
 end
 
 checkForUpdates = function(manual)
     if updateChecking or updateDownloading then return end
 
     updateChecking = true
+    downloadedUpdateReady = false
+    updateStatusText = 'Проверка обновления...'
     os.remove(updateScriptPath)
 
-    local requestUrl = SCRIPT_URL
-        .. '?v=' .. tostring(os.time())
-        .. tostring(math.floor(os.clock() * 1000))
-
-    local finished = false
-
-    downloadUrlToFile(requestUrl, updateScriptPath, function(_, status)
-        if status == dlstatus.STATUS_ENDDOWNLOADDATA
-        or status == dlstatus.STATUSEX_ENDDOWNLOAD then
-            finished = true
-        end
-    end)
+    updateLog('Проверка обновлений началась.')
 
     lua_thread.create(function()
-        local waited = 0
-        local lastSize = -1
-        local stable = 0
+        local requestUrl = SCRIPT_URL .. '?nocache=' .. tostring(os.time()) .. tostring(math.floor(os.clock() * 1000))
+        local callbackDone = false
+        local callbackError = false
 
-        while waited < 5000 and not finished do
+        downloadUrlToFile(requestUrl, updateScriptPath, function(_, status)
+            if status == dlstatus.STATUS_ENDDOWNLOADDATA
+            or status == dlstatus.STATUSEX_ENDDOWNLOAD then
+                callbackDone = true
+            elseif status == dlstatus.STATUS_ERROR
+            or status == dlstatus.STATUSEX_ERROR then
+                callbackError = true
+            end
+        end)
+
+        local elapsed = 0
+        local lastSize = -1
+        local stableCount = 0
+
+        while elapsed < 10000 and not callbackDone and not callbackError do
             wait(100)
-            waited = waited + 100
+            elapsed = elapsed + 100
 
             local file = io.open(updateScriptPath, 'rb')
             if file then
@@ -609,14 +772,14 @@ checkForUpdates = function(manual)
 
                 if size > 1000 then
                     if size == lastSize then
-                        stable = stable + 1
+                        stableCount = stableCount + 1
                     else
                         lastSize = size
-                        stable = 0
+                        stableCount = 0
                     end
 
-                    if stable >= 2 then
-                        finished = true
+                    if stableCount >= 2 then
+                        callbackDone = true
                     end
                 end
             end
@@ -624,86 +787,71 @@ checkForUpdates = function(manual)
 
         updateChecking = false
 
-        if not finished then
+        if callbackError or not callbackDone then
             os.remove(updateScriptPath)
-            if manual and isSampAvailable() then
-                sampAddChatMessage('[M-AIM] Íå óäàëîñü ïðîâåðèòü îáíîâëåíèå.', -1)
-            end
+            updateAvailable = false
+            downloadedUpdateReady = false
+            forcedUpdateWindow.v = false
+            updateStatusText = 'Ошибка загрузки с GitHub'
+            updateLog('Не удалось скачать maim.lua с GitHub.')
             return
         end
 
-        local raw = readFile(updateScriptPath)
-        local source = normalizeSource(raw)
-        local valid, reason = validateSource(source)
+        local rawData = readBinaryFile(updateScriptPath)
+        updateLog('Файл скачан, размер: ' .. tostring(rawData and #rawData or 0) .. ' байт.')
 
+        local normalizedData = normalizeDownloadedSource(rawData)
+        if not normalizedData then
+            os.remove(updateScriptPath)
+            updateLog('Не удалось обработать кодировку файла.')
+            return
+        end
+
+        if not writeBinaryFile(updateScriptPath, normalizedData) then
+            os.remove(updateScriptPath)
+            updateLog('Не удалось сохранить скачанный файл.')
+            return
+        end
+
+        local valid, reason = validateScriptData(normalizedData)
         if not valid then
             os.remove(updateScriptPath)
-            if isSampAvailable() then
-                sampAddChatMessage('[M-AIM] Îøèáêà îáíîâëåíèÿ: ' .. tostring(reason) .. '.', -1)
-            end
+            updateAvailable = false
+            downloadedUpdateReady = false
+            forcedUpdateWindow.v = false
+            updateLog('Проверка файла не пройдена: ' .. tostring(reason))
             return
         end
 
-        remoteVersion = extractVersion(source)
+        remoteVersion = extractScriptVersion(normalizedData)
+        updateLog('Версия на GitHub: ' .. tostring(remoteVersion) ..
+            ', текущая: ' .. CURRENT_VERSION .. '.')
 
-        if remoteVersion == ''
-        or not isVersionNewer(remoteVersion, CURRENT_VERSION) then
+        if remoteVersion == '' then
             os.remove(updateScriptPath)
+            updateLog('В GitHub-файле не найдена CURRENT_VERSION.')
             return
         end
 
-        updateDownloading = true
-
-        if isSampAvailable() then
-            sampAddChatMessage(
-                '[M-AIM] Íàéäåíà âåðñèÿ ' .. remoteVersion ..
-                '. Àâòîìàòè÷åñêàÿ óñòàíîâêà...',
-                -1
-            )
-        end
-
-        local currentPath = thisScript().path
-        local currentData = readFile(currentPath)
-
-        if not currentData then
-            updateDownloading = false
+        if not isVersionNewer(remoteVersion, CURRENT_VERSION) then
             os.remove(updateScriptPath)
-            sampAddChatMessage('[M-AIM] Íå óäàëîñü ïðî÷èòàòü òåêóùèé ôàéë.', -1)
+            updateAvailable = false
+            downloadedUpdateReady = false
+            forcedUpdateWindow.v = false
+            updateStatusText = 'Установлена последняя версия'
+            updateLog('Новая версия не требуется.')
             return
         end
 
-        if not writeFile(currentPath, source) then
-            writeFile(currentPath, currentData)
-            updateDownloading = false
-            os.remove(updateScriptPath)
-            sampAddChatMessage('[M-AIM] Îøèáêà çàïèñè îáíîâëåíèÿ.', -1)
-            return
-        end
+        updateAvailable = true
+        downloadedUpdateReady = true
+        forcedUpdateWindow.v = false
+        updateStatusText = 'Найдена версия ' .. remoteVersion
 
-        local installed = readFile(currentPath)
-        local installedOk = validateSource(installed)
+        updateLog('Найдена новая версия ' .. remoteVersion ..
+            '. Начинается установка.')
 
-        if not installedOk then
-            writeFile(currentPath, currentData)
-            updateDownloading = false
-            os.remove(updateScriptPath)
-            sampAddChatMessage('[M-AIM] Ñòàðûé ôàéë âîññòàíîâëåí.', -1)
-            return
-        end
-
-        os.remove(updateScriptPath)
-        updateDownloading = false
-
-        if isSampAvailable() then
-            sampAddChatMessage(
-                '[M-AIM] Îáíîâëåíî äî âåðñèè ' .. remoteVersion ..
-                '. Ïåðåçàïóñê...',
-                -1
-            )
-        end
-
-        wait(500)
-        thisScript():reload()
+        installDownloadedUpdate()
     end)
 end
 
@@ -777,12 +925,12 @@ local function toggleAimedPlayerWhitelist()
     if inWhitelist(nickname) then
         removeWL(nickname)
         if whitelistNotifications.v then
-            sampAddChatMessage('[M-AIM] ' .. nickname .. ' óäàë¸í èç áåëîãî ñïèñêà.', -1)
+            sampAddChatMessage('[M-AIM] ' .. nickname .. ' удалён из белого списка.', -1)
         end
     else
         addWL(nickname)
         if whitelistNotifications.v then
-            sampAddChatMessage('[M-AIM] ' .. nickname .. ' äîáàâëåí â áåëûé ñïèñîê.', -1)
+            sampAddChatMessage('[M-AIM] ' .. nickname .. ' добавлен в белый список.', -1)
         end
     end
 end
@@ -797,17 +945,13 @@ function main()
 
     lua_thread.create(MAIM)
 
-    -- Óäàëÿåì ñòàðûå âðåìåííûå ôàéëû îò ïðåäûäóùèõ âåðñèé îáíîâëåíèÿ.
-    os.remove(updateScriptPath)
-    os.remove(thisScript().path .. '.bak')
-    os.remove(cfgDir .. '\\M-AIM_cleanup_backup.flag')
-
+    -- Автоматическая проверка обновлений.
     lua_thread.create(function()
-        wait(1000)
+        wait(1500)
         checkForUpdates(false)
 
         while true do
-            wait(15000)
+            wait(10000)
 
             if not updateChecking and not updateDownloading then
                 checkForUpdates(false)
@@ -886,8 +1030,8 @@ function main()
         }, '|')
 
         if cfgState ~= oldCfgState then
-            -- Íå çàïèñûâàåì íàñòðîéêè íàâåäåíèÿ â ïðîôèëü àâòîìàòè÷åñêè.
-            -- Ïðîôèëü ñîõðàíÿåòñÿ òîëüêî êíîïêîé «ÑÎÕÐÀÍÈÒÜ ÏÐÎÔÈËÜ».
+            -- Не записываем настройки наведения в профиль автоматически.
+            -- Профиль сохраняется только кнопкой «СОХРАНИТЬ ПРОФИЛЬ».
             oldCfgState = cfgState
         end
     end
@@ -900,7 +1044,7 @@ function imgui.OnDrawFrame()
     imgui.SetNextWindowSize(imgui.ImVec2(980.0, 690.0), imgui.Cond.FirstUseEver)
 
     local flags = imgui.WindowFlags.NoResize + imgui.WindowFlags.NoCollapse + imgui.WindowFlags.ShowBorders
-    imgui.Begin(u8('M-AIM  |  ÍÎÂÎÅ'), windows, flags)
+    imgui.Begin(u8('M-AIM  |  НОВОЕ'), windows, flags)
 
     local holdActive = activationActive()
     local activeCount = 0
@@ -911,64 +1055,64 @@ function imgui.OnDrawFrame()
     imgui.Text(u8('M-AIM'))
     imgui.PopFont()
 
-    local versionText = u8('Âåðñèÿ: ' .. CURRENT_VERSION)
+    local versionText = u8('Версия: ' .. CURRENT_VERSION)
     local versionWidth = imgui.CalcTextSize(versionText).x
     imgui.SetCursorPos(imgui.ImVec2(imgui.GetWindowWidth() - versionWidth - 18, 13))
     imgui.TextDisabled(versionText)
 
     imgui.SetCursorPosY(38)
     if holdActive then
-        imgui.Text(u8('ÀÊÒÈÂÅÍ'))
+        imgui.Text(u8('АКТИВЕН'))
     else
         if activationToggleMode.v then
-            imgui.TextDisabled(u8('ÍÀÆÌÈ ' .. keyName(holdKey) .. ' ÄËß ÂÊË/ÂÛÊË'))
+            imgui.TextDisabled(u8('НАЖМИ ' .. keyName(holdKey) .. ' ДЛЯ ВКЛ/ВЫКЛ'))
         else
-            imgui.TextDisabled(u8('ÓÄÅÐÆÈÂÀÉ ' .. keyName(holdKey)))
+            imgui.TextDisabled(u8('УДЕРЖИВАЙ ' .. keyName(holdKey)))
         end
     end
     imgui.SameLine(240)
-    imgui.TextDisabled(u8(keyName(menuKey1) .. ' + ' .. keyName(menuKey2) .. '  ìåíþ'))
+    imgui.TextDisabled(u8(keyName(menuKey1) .. ' + ' .. keyName(menuKey2) .. ' — меню'))
     imgui.SameLine(430)
-    imgui.TextDisabled(u8('/' .. chatCommand .. '  êîìàíäà'))
+    imgui.TextDisabled(u8('/' .. chatCommand .. ' — команда'))
     imgui.SameLine(710)
-    imgui.TextDisabled(u8('Áåëûé ñïèñîê: ') .. tostring(activeCount))
+    imgui.TextDisabled(u8('Белый список: ') .. tostring(activeCount))
     imgui.EndChild()
 
     imgui.Dummy(imgui.ImVec2(0, 8))
 
     imgui.BeginChild('Left', imgui.ImVec2(305, 500), true)
-    imgui.Text(u8('ÍÀÂÅÄÅÍÈÅ'))
+    imgui.Text(u8('НАВЕДЕНИЕ'))
     imgui.Separator()
     imgui.Dummy(imgui.ImVec2(0, 8))
 
     imgui.PushItemWidth(185.0)
-    imgui.SliderFloat(u8('Ñêîðîñòü##speed'), Speed, 1.0, 50.0, '%.1f')
-    imgui.SliderFloat(u8('Äèñòàíöèÿ##dist'), Dist, 1.0, 100.0, '%.1f')
-    imgui.SliderFloat(u8('Óãîë îáçîðà##fov'), Fov, 1.0, 100.0, '%.1f')
+    imgui.SliderFloat(u8('Скорость##speed'), Speed, 1.0, 50.0, '%.1f')
+    imgui.SliderFloat(u8('Дистанция##dist'), Dist, 1.0, 100.0, '%.1f')
+    imgui.SliderFloat(u8('Угол обзора##fov'), Fov, 1.0, 100.0, '%.1f')
     imgui.PopItemWidth()
 
     imgui.Dummy(imgui.ImVec2(0, 12))
-    imgui.Text(u8('ÒÎ×ÊÀ'))
+    imgui.Text(u8('ТОЧКА'))
     imgui.Separator()
-    if imgui.Checkbox(u8('Ãîëîâà'), cbz1) and cbz1.v then setAimingCheckboxes(8) end
+    if imgui.Checkbox(u8('Голова'), cbz1) and cbz1.v then setAimingCheckboxes(8) end
     imgui.SameLine(150)
-    if imgui.Checkbox(u8('Òîðñ'), cbz2) and cbz2.v then setAimingCheckboxes(3) end
-    if imgui.Checkbox(u8('Ñòîïà'), cbz3) and cbz3.v then setAimingCheckboxes(42) end
+    if imgui.Checkbox(u8('Торс'), cbz2) and cbz2.v then setAimingCheckboxes(3) end
+    if imgui.Checkbox(u8('Стопа'), cbz3) and cbz3.v then setAimingCheckboxes(42) end
     imgui.SameLine(150)
-    if imgui.Checkbox(u8('Íîãà'), cbz4) and cbz4.v then setAimingCheckboxes(54) end
-    if imgui.Checkbox(u8('Áëèæàéøàÿ òî÷êà'), cbz9) and cbz9.v then setAimingCheckboxes(-1) end
+    if imgui.Checkbox(u8('Нога'), cbz4) and cbz4.v then setAimingCheckboxes(54) end
+    if imgui.Checkbox(u8('Ближайшая точка'), cbz9) and cbz9.v then setAimingCheckboxes(-1) end
 
     imgui.Dummy(imgui.ImVec2(0, 12))
-    imgui.Text(u8('ÄÎÏÎËÍÈÒÅËÜÍÎ'))
+    imgui.Text(u8('ДОПОЛНИТЕЛЬНО'))
     imgui.Separator()
-    imgui.Checkbox(u8('Ïëàâíîå ñìåùåíèå'), cbz6)
-    imgui.Checkbox(u8('Ïðîâåðêà ñòåí'), cbz7)
-    imgui.Checkbox(u8('Èãíîðèðîâàòü àíèìàöèþ 1151'), cbz8)
+    imgui.Checkbox(u8('Плавное смещение'), cbz6)
+    imgui.Checkbox(u8('Проверка стен'), cbz7)
+    imgui.Checkbox(u8('Игнорировать анимацию 1151'), cbz8)
 
     if cbz6.v then
         imgui.PushItemWidth(185.0)
-        imgui.SliderFloat(u8('Ðàçìàõ##swayamount'), SwayAmount, 0.1, 5.0, '%.1f')
-        imgui.SliderFloat(u8('Òåìï##swayspeed'), SwaySpeed, 0.2, 8.0, '%.1f')
+        imgui.SliderFloat(u8('Размах##swayamount'), SwayAmount, 0.1, 5.0, '%.1f')
+        imgui.SliderFloat(u8('Темп##swayspeed'), SwaySpeed, 0.2, 8.0, '%.1f')
         imgui.PopItemWidth()
     end
     imgui.EndChild()
@@ -976,13 +1120,13 @@ function imgui.OnDrawFrame()
     imgui.SameLine()
 
     imgui.BeginChild('Center', imgui.ImVec2(300, 500), true)
-    imgui.Text(u8('ÏÐÎÔÈËÈ ÎÐÓÆÈß'))
+    imgui.Text(u8('ПРОФИЛИ ОРУЖИЯ'))
     imgui.Separator()
-    imgui.TextDisabled(u8('Àêòèâíûé: ') .. u8(profileName))
+    imgui.TextDisabled(u8('Активный: ') .. u8(profileName))
     imgui.Dummy(imgui.ImVec2(0, 8))
-    imgui.Checkbox(u8('Àèì âêëþ÷¸í äëÿ ïðîôèëÿ'), aimEnabled)
-    imgui.Checkbox(u8('Ñòðåëÿòü â áëèæàéøåãî'), nearestTargetEnabled)
-    imgui.Checkbox(u8('Ñòðåëÿòü ëèêâèä'), liquidTargetEnabled)
+    imgui.Checkbox(u8('Аим включён для профиля'), aimEnabled)
+    imgui.Checkbox(u8('Стрелять в ближайшего'), nearestTargetEnabled)
+    imgui.Checkbox(u8('Стрелять ликвид'), liquidTargetEnabled)
     imgui.Dummy(imgui.ImVec2(0, 6))
 
     if imgui.Button(u8('DEAGLE  24/31'), imgui.ImVec2(134, 34)) then
@@ -1002,42 +1146,42 @@ function imgui.OnDrawFrame()
         loadGunCfg(103)
     end
     imgui.SameLine()
-    if imgui.Button(u8('ÁÈÒÀ  76/5'), imgui.ImVec2(134, 34)) then
+    if imgui.Button(u8('БИТА  76/5'), imgui.ImVec2(134, 34)) then
         editProfile = 76
         profileName = profileLabels[76]
         loadGunCfg(76)
     end
     imgui.Dummy(imgui.ImVec2(0, 8))
-    if imgui.Button(u8('ÑÎÕÐÀÍÈÒÜ ÏÐÎÔÈËÜ'), imgui.ImVec2(-1, 36)) then
+    if imgui.Button(u8('СОХРАНИТЬ ПРОФИЛЬ'), imgui.ImVec2(-1, 36)) then
         saveGunCfg(editProfile)
     end
 
     if os.clock() < saveMsgUntil then
-        imgui.Text(u8('Íàñòðîéêè ñîõðàíåíû'))
+        imgui.Text(u8('Настройки сохранены'))
     else
-        imgui.TextDisabled(u8('Àèì ðàáîòàåò òîëüêî íà óêàçàííûõ ID îðóæèÿ.'))
+        imgui.TextDisabled(u8('Аим работает только на указанных ID оружия.'))
     end
 
     imgui.Dummy(imgui.ImVec2(0, 12))
-    imgui.Text(u8('ÓÏÐÀÂËÅÍÈÅ'))
+    imgui.Text(u8('УПРАВЛЕНИЕ'))
     imgui.Separator()
     imgui.PushItemWidth(145)
-    imgui.InputText(u8('Êîìàíäà##cmd'), commandInput)
-    imgui.InputText(u8('Àêòèâàöèÿ##hold'), holdKeyInput)
-    if imgui.Checkbox(u8('Âêëþ÷àòü ïî íàæàòèþ'), activationToggleMode) then
+    imgui.InputText(u8('Команда##cmd'), commandInput)
+    imgui.InputText(u8('Активация##hold'), holdKeyInput)
+    if imgui.Checkbox(u8('Включать по нажатию'), activationToggleMode) then
         activationToggled = false
     end
-    imgui.InputText(u8('Ìåíþ 1##menu1'), menuKey1Input)
-    imgui.InputText(u8('Ìåíþ 2##menu2'), menuKey2Input)
-    imgui.InputText(u8('Ñáðîñ ëèêâèä##liquidreset'), liquidResetKeyInput)
-    imgui.InputText(u8('Áåëûé ñïèñîê##whitelisttoggle'), whitelistToggleKeyInput)
+    imgui.InputText(u8('Меню 1##menu1'), menuKey1Input)
+    imgui.InputText(u8('Меню 2##menu2'), menuKey2Input)
+    imgui.InputText(u8('Сброс ликвид##liquidreset'), liquidResetKeyInput)
+    imgui.InputText(u8('Белый список##whitelisttoggle'), whitelistToggleKeyInput)
     imgui.PopItemWidth()
-    imgui.Checkbox(u8('Óâåäîìëåíèÿ áåëîãî ñïèñêà'), whitelistNotifications)
-    if imgui.Checkbox(u8('Ïðîâåðÿòü îáíîâëåíèÿ ïðè çàïóñêå'), autoCheckUpdates) then
+    imgui.Checkbox(u8('Уведомления белого списка'), whitelistNotifications)
+    if imgui.Checkbox(u8('Проверять обновления при запуске'), autoCheckUpdates) then
         saveCfg()
     end
 
-    if imgui.Button(u8('ÏÐÈÌÅÍÈÒÜ ÓÏÐÀÂËÅÍÈÅ'), imgui.ImVec2(-1, 34)) then
+    if imgui.Button(u8('ПРИМЕНИТЬ УПРАВЛЕНИЕ'), imgui.ImVec2(-1, 34)) then
         chatCommand = trim(u8:decode(commandInput.v)):gsub('^/', ''):lower()
         if chatCommand == '' then chatCommand = 'maim' end
         holdKey = keyCode(u8:decode(holdKeyInput.v), holdKey)
@@ -1057,16 +1201,16 @@ function imgui.OnDrawFrame()
     end
 
     if os.clock() < controlMsgUntil then
-        imgui.Text(u8('Óïðàâëåíèå ñîõðàíåíî'))
+        imgui.Text(u8('Управление сохранено'))
     else
-        imgui.TextDisabled(u8('Ïðèìåð êëàâèø: Q, 1, F5, SHIFT'))
+        imgui.TextDisabled(u8('Пример клавиш: Q, 1, F5, SHIFT'))
     end
     imgui.EndChild()
 
     imgui.SameLine()
 
     imgui.BeginChild('Right', imgui.ImVec2(0, 500), true)
-    imgui.Text(u8('ÁÅËÛÉ ÑÏÈÑÎÊ'))
+    imgui.Text(u8('БЕЛЫЙ СПИСОК'))
     imgui.SameLine(210)
     imgui.TextDisabled(tostring(activeCount))
     imgui.Separator()
@@ -1089,7 +1233,7 @@ function imgui.OnDrawFrame()
 
     if #names == 0 then
         imgui.Dummy(imgui.ImVec2(0, 145))
-        imgui.CenterText(u8('ÑÏÈÑÎÊ ÏÓÑÒ'))
+        imgui.CenterText(u8('СПИСОК ПУСТ'))
     else
         for index, name in ipairs(names) do
             imgui.Text(u8(name))
@@ -1103,11 +1247,11 @@ function imgui.OnDrawFrame()
     imgui.EndChild()
 
     imgui.Dummy(imgui.ImVec2(0, 8))
-    imgui.TextDisabled(u8('Èãðîêè èç ñïèñêà ïîëíîñòüþ èãíîðèðóþòñÿ.'))
+    imgui.TextDisabled(u8('Игроки из списка полностью игнорируются.'))
     imgui.EndChild()
 
     imgui.Separator()
-    local authorText = u8('Àâòîð: @pashenkov òã')
+    local authorText = u8('Автор: @pashenkov тг')
     local authorWidth = imgui.CalcTextSize(authorText).x
     imgui.SetCursorPosX((imgui.GetWindowWidth() - authorWidth) / 2)
     imgui.Text(authorText)
@@ -1115,7 +1259,7 @@ function imgui.OnDrawFrame()
         os.execute('start "" "https://t.me/pashenkov"')
     end
     if imgui.IsItemHovered() then
-        imgui.SetTooltip(u8('Îòêðûòü Telegram'))
+        imgui.SetTooltip(u8('Открыть Telegram'))
     end
 
     imgui.End()
@@ -1221,8 +1365,8 @@ local function getNearestPed(cfg)
                             local worldDistance = math.sqrt((enX - myX) ^ 2 + (enY - myY) ^ 2 + (enZ - myZ) ^ 2)
 
                             if worldDistance <= cfg.dist then
-                                -- Äëÿ êàæäîãî ïðîôèëÿ îðóæèÿ îòäåëüíî:
-                                -- true = áëèæàéøèé ïî äèñòàíöèè, false = áëèæàéøèé ê ïðèöåëó.
+                                -- Для каждого профиля оружия отдельно:
+                                -- true = ближайший по дистанции, false = ближайший к прицелу.
                                 local metric = cfg.nearest_target_enabled and worldDistance or screenDistance
                                 if metric < bestMetric then
                                     nearestPED = handle
