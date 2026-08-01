@@ -8,9 +8,9 @@ local dlstatus = require('moonloader').download_status
 
 script_name('M-AIM')
 script_author('Pashenkov')
-script_version('1.2.8')
+script_version('1.2.6')
 
-local CURRENT_VERSION = '1.2.8'
+local CURRENT_VERSION = '1.2.6'
 local SCRIPT_URL = 'https://raw.githubusercontent.com/tcuevhostor4-sudo/Marsh/main/maim.lua'
 
 local cfgDir = getWorkingDirectory() .. '\\config'
@@ -477,82 +477,46 @@ local function loadGunCfg(id)
 end
 
 local function parseVersion(version)
-    local result = {}
+    local numbers = {}
     for number in tostring(version or ''):gmatch('%d+') do
-        result[#result + 1] = tonumber(number) or 0
+        numbers[#numbers + 1] = tonumber(number) or 0
     end
-    return result
+    return numbers
 end
 
 local function isVersionNewer(remote, current)
     local a = parseVersion(remote)
     local b = parseVersion(current)
     local count = math.max(#a, #b)
+
     for i = 1, count do
         local av = a[i] or 0
         local bv = b[i] or 0
+
         if av > bv then return true end
         if av < bv then return false end
     end
+
     return false
-end
-
-local function downloadFinished(status)
-    return status == dlstatus.STATUS_ENDDOWNLOADDATA
-        or status == dlstatus.STATUSEX_ENDDOWNLOAD
-end
-
-local function validDownloadedScript(path)
-    local file = io.open(path, 'rb')
-    if not file then
-        return false, 'файл не создан'
-    end
-
-    local data = file:read('*a') or ''
-    file:close()
-
-    if #data < 1000 then
-        return false, 'слишком маленький размер: ' .. tostring(#data) .. ' байт'
-    end
-
-    local lowerData = data:lower()
-    if lowerData:find('<!doctype html', 1, true)
-    or lowerData:find('<html', 1, true)
-    or lowerData:find('404: not found', 1, true) then
-        return false, 'GitHub вернул страницу ошибки вместо Lua-файла'
-    end
-
-    if not data:find("require 'imgui'", 1, true)
-    and not data:find('require "imgui"', 1, true) then
-        return false, 'в файле не найден модуль imgui'
-    end
-
-    if not data:find("script_name('M-AIM')", 1, true)
-    and not data:find('script_name("M-AIM")', 1, true) then
-        return false, 'это не файл M-AIM'
-    end
-
-    if not data:find('function main()', 1, true) then
-        return false, 'не найдена функция main'
-    end
-
-    return true
-end
-
-local function validLuaSyntax(path)
-    local chunk, errorText = loadfile(path)
-    if not chunk then
-        return false, tostring(errorText or 'неизвестная ошибка Lua')
-    end
-    return true
 end
 
 local function readBinaryFile(path)
     local file = io.open(path, 'rb')
     if not file then return nil end
+
     local data = file:read('*a') or ''
     file:close()
     return data
+end
+
+local function writeBinaryFile(path, data)
+    local file = io.open(path, 'wb')
+    if not file then return false end
+
+    local ok = file:write(data)
+    file:flush()
+    file:close()
+    return ok ~= nil
 end
 
 local function extractScriptVersion(data)
@@ -567,57 +531,85 @@ local function extractScriptVersion(data)
     return ''
 end
 
-local function filesAreEqual(pathA, pathB)
-    local dataA = readBinaryFile(pathA)
-    local dataB = readBinaryFile(pathB)
-    return dataA ~= nil and dataB ~= nil and dataA == dataB
+local function normalizeDownloadedSource(data)
+    if not data or data == '' then return nil end
+
+    -- Удаляем UTF-8 BOM.
+    if data:sub(1, 3) == '\239\187\191' then
+        data = data:sub(4)
+    end
+
+    -- GitHub обычно отдаёт UTF-8. Переводим исходник в CP1251,
+    -- чтобы русские строки корректно работали с encoding.default = 'CP1251'.
+    local ok, converted = pcall(function()
+        return u8:decode(data)
+    end)
+
+    if ok and converted
+    and converted:find("script_name('M-AIM')", 1, true) then
+        return converted
+    end
+
+    -- Если файл уже CP1251, используем его как есть.
+    return data
 end
 
-local function installUpdate()
-    if updateDownloading then return end
-
-    if not downloadedUpdateReady or not doesFileExist(updateScriptPath) then
-        checkForUpdates(true, true)
-        return
+local function validateScriptData(data)
+    if not data or #data < 1000 then
+        return false, 'файл слишком маленький'
     end
+
+    local lower = data:lower()
+    if lower:find('<!doctype html', 1, true)
+    or lower:find('<html', 1, true)
+    or lower:find('404: not found', 1, true) then
+        return false, 'GitHub вернул страницу ошибки'
+    end
+
+    if not data:find("script_name('M-AIM')", 1, true)
+    and not data:find('script_name("M-AIM")', 1, true) then
+        return false, 'скачан не M-AIM'
+    end
+
+    if not data:find('function main()', 1, true) then
+        return false, 'не найдена функция main'
+    end
+
+    local chunk, syntaxError = loadstring(data, '@M-AIM_update.lua')
+    if not chunk then
+        return false, 'ошибка Lua: ' .. tostring(syntaxError)
+    end
+
+    return true
+end
+
+local checkForUpdates
+local installDownloadedUpdate
+
+installDownloadedUpdate = function()
+    if updateDownloading or not downloadedUpdateReady then return end
 
     updateDownloading = true
-    forcedUpdateWindow.v = true
-    imgui.Process = true
     updateStatusText = 'Установка обновления...'
-
-    if isSampAvailable() then
-        sampAddChatMessage('[M-AIM] Начата установка обновления...', -1)
-    end
+    forcedUpdateWindow.v = true
+    windows.v = false
+    imgui.Process = true
 
     lua_thread.create(function()
-        wait(300)
+        wait(200)
 
-        local valid, reason = validDownloadedScript(updateScriptPath)
+        local downloadedData = readBinaryFile(updateScriptPath)
+        local valid, reason = validateScriptData(downloadedData)
+
         if not valid then
             updateDownloading = false
             downloadedUpdateReady = false
             updateAvailable = false
+            forcedUpdateWindow.v = false
             os.remove(updateScriptPath)
-            updateStatusText = 'Ошибка: ' .. tostring(reason)
 
             if isSampAvailable() then
-                sampAddChatMessage('[M-AIM] Обновление не установлено: ' .. tostring(reason) .. '.', -1)
-            end
-            return
-        end
-
-        local syntaxOk, syntaxError = validLuaSyntax(updateScriptPath)
-        if not syntaxOk then
-            updateDownloading = false
-            downloadedUpdateReady = false
-            updateAvailable = false
-            os.remove(updateScriptPath)
-            updateStatusText = 'Ошибка Lua в новой версии'
-
-            if isSampAvailable() then
-                sampAddChatMessage('[M-AIM] Новая версия не установлена: ошибка Lua.', -1)
-                sampAddChatMessage('[M-AIM] ' .. tostring(syntaxError), -1)
+                sampAddChatMessage('[M-AIM] Обновление отменено: ' .. tostring(reason) .. '.', -1)
             end
             return
         end
@@ -625,75 +617,47 @@ local function installUpdate()
         local currentPath = thisScript().path
         local backupPath = currentPath .. '.bak'
         local currentData = readBinaryFile(currentPath)
-        local downloadedData = readBinaryFile(updateScriptPath)
 
-        if not currentData or not downloadedData then
+        if not currentData then
             updateDownloading = false
-            updateStatusText = 'Ошибка чтения файлов обновления'
+            sampAddChatMessage('[M-AIM] Не удалось прочитать текущий файл.', -1)
             return
         end
 
         os.remove(backupPath)
 
-        local backupFile = io.open(backupPath, 'wb')
-        if not backupFile then
+        if not writeBinaryFile(backupPath, currentData) then
             updateDownloading = false
-            updateStatusText = 'Ошибка создания резервной копии'
-            return
-        end
-        backupFile:write(currentData)
-        backupFile:close()
-
-        local targetFile = io.open(currentPath, 'wb')
-        if not targetFile then
-            updateDownloading = false
-            updateStatusText = 'Ошибка замены текущего файла'
+            sampAddChatMessage('[M-AIM] Не удалось создать резервную копию.', -1)
             return
         end
 
-        local writeOk = targetFile:write(downloadedData)
-        targetFile:flush()
-        targetFile:close()
-
-        if not writeOk then
-            local restore = io.open(currentPath, 'wb')
-            if restore then
-                restore:write(currentData)
-                restore:close()
-            end
-
+        if not writeBinaryFile(currentPath, downloadedData) then
+            writeBinaryFile(currentPath, currentData)
             updateDownloading = false
-            updateStatusText = 'Ошибка записи обновления'
+            sampAddChatMessage('[M-AIM] Ошибка записи. Старый файл восстановлен.', -1)
             return
         end
 
-        local installed, installedReason = validDownloadedScript(currentPath)
-        local installedSyntaxOk, installedSyntaxError = validLuaSyntax(currentPath)
+        local installedData = readBinaryFile(currentPath)
+        local installedOk, installedReason = validateScriptData(installedData)
 
-        if not installed or not installedSyntaxOk then
-            local restore = io.open(currentPath, 'wb')
-            if restore then
-                restore:write(currentData)
-                restore:flush()
-                restore:close()
-            end
-
+        if not installedOk then
+            writeBinaryFile(currentPath, currentData)
             updateDownloading = false
-            updateAvailable = true
+            updateAvailable = false
             downloadedUpdateReady = false
-            forcedUpdateWindow.v = true
+            forcedUpdateWindow.v = false
 
-            if not installed then
-                updateStatusText = 'Ошибка установки: ' .. tostring(installedReason)
-            else
-                updateStatusText = 'Ошибка Lua: ' .. tostring(installedSyntaxError)
-            end
-
-            if isSampAvailable() then
-                sampAddChatMessage('[M-AIM] Новая версия не запускается. Старый файл восстановлен.', -1)
-            end
+            sampAddChatMessage(
+                '[M-AIM] Новая версия не прошла проверку: ' ..
+                tostring(installedReason) .. '. Старый файл восстановлен.',
+                -1
+            )
             return
         end
+
+        os.remove(updateScriptPath)
 
         updateDownloading = false
         updateAvailable = false
@@ -701,115 +665,133 @@ local function installUpdate()
         forcedUpdateWindow.v = false
         windows.v = false
         imgui.Process = false
-        updateStatusText = 'Обновление установлено. Перезапуск...'
 
         if isSampAvailable() then
-            sampAddChatMessage('[M-AIM] Обновление загружено и установлено.', -1)
-            sampAddChatMessage('[M-AIM] Перезапуск скрипта через 3 секунды...', -1)
+            sampAddChatMessage(
+                '[M-AIM] Обновление до версии ' .. tostring(remoteVersion) ..
+                ' установлено. Перезапуск...',
+                -1
+            )
         end
 
-        wait(3000)
-
-        -- Удаляем временные файлы только после полной записи и проверки.
-        os.remove(updateScriptPath)
-        os.remove(backupPath)
-
-        wait(500)
+        wait(1500)
         thisScript():reload()
     end)
 end
 
-local function checkForUpdates(manual, installAfterCheck)
+checkForUpdates = function(manual)
     if updateChecking or updateDownloading then return end
 
     updateChecking = true
-    updateStatusText = 'Проверка файла maim.lua...'
     downloadedUpdateReady = false
+    updateStatusText = 'Проверка обновления...'
     os.remove(updateScriptPath)
 
-    local callbackFinished = false
-    downloadUrlToFile(SCRIPT_URL .. '?t=' .. tostring(os.time()), updateScriptPath, function(_, status)
-        if callbackFinished or not downloadFinished(status) then return end
-        callbackFinished = true
+    lua_thread.create(function()
+        local urls = {
+            SCRIPT_URL .. '?nocache=' .. tostring(os.time()),
+            SCRIPT_URL
+        }
 
-        lua_thread.create(function()
-            wait(1200)
-            updateChecking = false
+        local downloaded = false
 
-            local valid, reason = validDownloadedScript(updateScriptPath)
-            if not valid then
-                os.remove(updateScriptPath)
-                updateAvailable = false
-                downloadedUpdateReady = false
-                updateStatusText = 'Ошибка проверки: ' .. tostring(reason)
+        for attempt = 1, #urls do
+            local finished = false
+            local failed = false
 
-                if manual and isSampAvailable() then
-                    sampAddChatMessage('[M-AIM] Не удалось проверить обновление: ' .. tostring(reason) .. '.', -1)
+            os.remove(updateScriptPath)
+
+            downloadUrlToFile(urls[attempt], updateScriptPath, function(_, status)
+                if status == dlstatus.STATUS_ENDDOWNLOADDATA then
+                    finished = true
                 end
-                return
+            end)
+
+            local waited = 0
+            while not finished and waited < 15000 do
+                wait(100)
+                waited = waited + 100
             end
 
-            local syntaxOk, syntaxError = validLuaSyntax(updateScriptPath)
-            if not syntaxOk then
-                os.remove(updateScriptPath)
-                updateAvailable = false
-                downloadedUpdateReady = false
-                updateStatusText = 'Ошибка Lua в обновлении'
+            if finished then
+                wait(500)
 
-                if isSampAvailable() then
-                    sampAddChatMessage('[M-AIM] Новая версия содержит ошибку Lua и не будет установлена.', -1)
-                    sampAddChatMessage('[M-AIM] ' .. tostring(syntaxError), -1)
+                local rawData = readBinaryFile(updateScriptPath)
+                local normalizedData = normalizeDownloadedSource(rawData)
+
+                if normalizedData and writeBinaryFile(updateScriptPath, normalizedData) then
+                    local valid = validateScriptData(normalizedData)
+                    if valid then
+                        downloaded = true
+                        break
+                    end
                 end
-                return
             end
+        end
 
-            local currentPath = thisScript().path
-            local remoteData = readBinaryFile(updateScriptPath)
-            remoteVersion = extractScriptVersion(remoteData)
+        updateChecking = false
 
-            local newerByVersion = remoteVersion ~= ''
-                and isVersionNewer(remoteVersion, CURRENT_VERSION)
-            local differentFile = not filesAreEqual(currentPath, updateScriptPath)
+        if not downloaded then
+            os.remove(updateScriptPath)
+            updateAvailable = false
+            downloadedUpdateReady = false
+            forcedUpdateWindow.v = false
+            updateStatusText = 'Не удалось скачать обновление'
 
-            if not newerByVersion and not differentFile then
-                os.remove(updateScriptPath)
-                updateAvailable = false
-                downloadedUpdateReady = false
-                forcedUpdateWindow.v = false
-                remoteVersion = CURRENT_VERSION
-                updateStatusText = 'Установлена последняя версия'
-
-                if manual and isSampAvailable() then
-                    sampAddChatMessage('[M-AIM] Обновлений нет.', -1)
-                end
-                return
+            if manual and isSampAvailable() then
+                sampAddChatMessage('[M-AIM] Не удалось скачать файл с GitHub.', -1)
             end
+            return
+        end
 
-            updateAvailable = true
-            downloadedUpdateReady = true
-            forcedUpdateWindow.v = true
-            windows.v = false
-            imgui.Process = true
+        local downloadedData = readBinaryFile(updateScriptPath)
+        remoteVersion = extractScriptVersion(downloadedData)
 
-            if remoteVersion ~= '' then
-                updateStatusText = 'Доступно обязательное обновление: ' .. remoteVersion
-            else
-                updateStatusText = 'На GitHub найден новый файл maim.lua'
-            end
+        if remoteVersion == '' then
+            os.remove(updateScriptPath)
+            updateAvailable = false
+            downloadedUpdateReady = false
 
             if isSampAvailable() then
-                if remoteVersion ~= '' then
-                    sampAddChatMessage('[M-AIM] Найдено обязательное обновление ' .. remoteVersion .. '. Установите его для продолжения.', -1)
-                else
-                    sampAddChatMessage('[M-AIM] Найдено обязательное обновление. Установите его для продолжения.', -1)
-                end
+                sampAddChatMessage('[M-AIM] В GitHub-файле не найдена версия.', -1)
             end
+            return
+        end
 
-            if installAfterCheck then
-                wait(250)
-                installUpdate()
+        if not isVersionNewer(remoteVersion, CURRENT_VERSION) then
+            os.remove(updateScriptPath)
+            updateAvailable = false
+            downloadedUpdateReady = false
+            forcedUpdateWindow.v = false
+            updateStatusText = 'Установлена последняя версия'
+
+            if manual and isSampAvailable() then
+                sampAddChatMessage(
+                    '[M-AIM] Обновлений нет. Текущая версия: ' ..
+                    CURRENT_VERSION .. ', GitHub: ' .. remoteVersion .. '.',
+                    -1
+                )
             end
-        end)
+            return
+        end
+
+        updateAvailable = true
+        downloadedUpdateReady = true
+        forcedUpdateWindow.v = true
+        windows.v = false
+        imgui.Process = true
+        updateStatusText = 'Найдена версия ' .. remoteVersion
+
+        if isSampAvailable() then
+            sampAddChatMessage(
+                '[M-AIM] Найдена версия ' .. remoteVersion ..
+                '. Автоматическая установка...',
+                -1
+            )
+        end
+
+        wait(300)
+        installDownloadedUpdate()
     end)
 end
 
@@ -907,14 +889,17 @@ function main()
 
     lua_thread.create(MAIM)
 
-    -- Проверяем обновления не только при запуске, но и во время игры.
+    -- Автоматическая проверка обновлений.
     lua_thread.create(function()
-        wait(1500)
+        wait(3000)
+        checkForUpdates(false)
+
         while true do
-            if autoCheckUpdates.v then
-                checkForUpdates(false, false)
+            wait(30000)
+
+            if not updateChecking and not updateDownloading then
+                checkForUpdates(false)
             end
-            wait(30000) -- раз в 30 секунд
         end
     end)
 
@@ -1034,22 +1019,14 @@ function imgui.OnDrawFrame()
         end
 
         imgui.Dummy(imgui.ImVec2(0, 10))
-        imgui.TextWrapped(u8('Для продолжения работы необходимо установить обновление. До установки функции M-AIM заблокированы.'))
+        imgui.TextWrapped(u8('Обновление скачивается и устанавливается автоматически. Подождите завершения.'))
 
         imgui.Dummy(imgui.ImVec2(0, 14))
 
         if updateDownloading then
-            imgui.PushItemWidth(-1)
-            imgui.Button(u8('УСТАНОВКА ОБНОВЛЕНИЯ...'), imgui.ImVec2(-1, 42))
-            imgui.PopItemWidth()
-        elseif downloadedUpdateReady then
-            if imgui.Button(u8('УСТАНОВИТЬ НОВУЮ ВЕРСИЮ'), imgui.ImVec2(-1, 42)) then
-                installUpdate()
-            end
+            imgui.Button(u8('АВТОМАТИЧЕСКАЯ УСТАНОВКА...'), imgui.ImVec2(-1, 42))
         else
-            if imgui.Button(u8('ПОВТОРИТЬ ПРОВЕРКУ'), imgui.ImVec2(-1, 42)) then
-                checkForUpdates(true, false)
-            end
+            imgui.Button(u8('ПОДГОТОВКА ОБНОВЛЕНИЯ...'), imgui.ImVec2(-1, 42))
         end
 
         imgui.End()
@@ -1075,38 +1052,8 @@ function imgui.OnDrawFrame()
 
     local versionText = u8('Версия: ' .. CURRENT_VERSION)
     local versionWidth = imgui.CalcTextSize(versionText).x
-
-    if updateAvailable or updateDownloading then
-        local updateLabel
-        local buttonText
-
-        if updateDownloading then
-            updateLabel = u8('Установка обновления')
-            buttonText = u8('УСТАНОВКА...')
-        else
-            updateLabel = u8('Доступна новая версия')
-            buttonText = u8('ОБНОВИТЬ')
-        end
-
-        local labelWidth = imgui.CalcTextSize(updateLabel).x
-        local buttonWidth = 112
-        local totalWidth = versionWidth + 16 + labelWidth + 10 + buttonWidth
-
-        imgui.SetCursorPos(imgui.ImVec2(imgui.GetWindowWidth() - totalWidth - 18, 10))
-        imgui.TextDisabled(versionText)
-        imgui.SameLine()
-        imgui.Text(updateLabel)
-        imgui.SameLine()
-
-        if updateDownloading then
-            imgui.Button(buttonText, imgui.ImVec2(buttonWidth, 28))
-        elseif imgui.Button(buttonText, imgui.ImVec2(buttonWidth, 28)) then
-            installUpdate()
-        end
-    else
-        imgui.SetCursorPos(imgui.ImVec2(imgui.GetWindowWidth() - versionWidth - 18, 13))
-        imgui.TextDisabled(versionText)
-    end
+    imgui.SetCursorPos(imgui.ImVec2(imgui.GetWindowWidth() - versionWidth - 18, 13))
+    imgui.TextDisabled(versionText)
 
     imgui.SetCursorPosY(38)
     if holdActive then
