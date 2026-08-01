@@ -8,9 +8,9 @@ local dlstatus = require('moonloader').download_status
 
 script_name('M-AIM')
 script_author('Pashenkov')
-script_version('1.0.9')
+script_version('1.2.5')
 
-local CURRENT_VERSION = '1.0.9'
+local CURRENT_VERSION = '1.2.5'
 local SCRIPT_URL = 'https://raw.githubusercontent.com/tcuevhostor4-sudo/Marsh/main/maim.lua'
 
 local cfgDir = getWorkingDirectory() .. '\\config'
@@ -539,6 +539,14 @@ local function validDownloadedScript(path)
     return true
 end
 
+local function validLuaSyntax(path)
+    local chunk, errorText = loadfile(path)
+    if not chunk then
+        return false, tostring(errorText or 'неизвестная ошибка Lua')
+    end
+    return true
+end
+
 local function readBinaryFile(path)
     local file = io.open(path, 'rb')
     if not file then return nil end
@@ -599,6 +607,21 @@ local function installUpdate()
             return
         end
 
+        local syntaxOk, syntaxError = validLuaSyntax(updateScriptPath)
+        if not syntaxOk then
+            updateDownloading = false
+            downloadedUpdateReady = false
+            updateAvailable = false
+            os.remove(updateScriptPath)
+            updateStatusText = 'Ошибка Lua в новой версии'
+
+            if isSampAvailable() then
+                sampAddChatMessage('[M-AIM] Новая версия не установлена: ошибка Lua.', -1)
+                sampAddChatMessage('[M-AIM] ' .. tostring(syntaxError), -1)
+            end
+            return
+        end
+
         local currentPath = thisScript().path
         local backupPath = currentPath .. '.bak'
         local currentData = readBinaryFile(currentPath)
@@ -645,37 +668,53 @@ local function installUpdate()
         end
 
         local installed, installedReason = validDownloadedScript(currentPath)
-        if not installed then
+        local installedSyntaxOk, installedSyntaxError = validLuaSyntax(currentPath)
+
+        if not installed or not installedSyntaxOk then
             local restore = io.open(currentPath, 'wb')
             if restore then
                 restore:write(currentData)
+                restore:flush()
                 restore:close()
             end
 
             updateDownloading = false
-            updateStatusText = 'Ошибка установки: ' .. tostring(installedReason)
+            updateAvailable = true
+            downloadedUpdateReady = false
+            forcedUpdateWindow.v = true
+
+            if not installed then
+                updateStatusText = 'Ошибка установки: ' .. tostring(installedReason)
+            else
+                updateStatusText = 'Ошибка Lua: ' .. tostring(installedSyntaxError)
+            end
 
             if isSampAvailable() then
-                sampAddChatMessage('[M-AIM] Ошибка установки. Старый файл восстановлен.', -1)
+                sampAddChatMessage('[M-AIM] Новая версия не запускается. Старый файл восстановлен.', -1)
             end
             return
         end
-
-        os.remove(updateScriptPath)
-        os.remove(backupPath)
 
         updateDownloading = false
         updateAvailable = false
         downloadedUpdateReady = false
         forcedUpdateWindow.v = false
+        windows.v = false
+        imgui.Process = false
         updateStatusText = 'Обновление установлено. Перезапуск...'
 
         if isSampAvailable() then
             sampAddChatMessage('[M-AIM] Обновление загружено и установлено.', -1)
-            sampAddChatMessage('[M-AIM] Перезапуск скрипта...', -1)
+            sampAddChatMessage('[M-AIM] Перезапуск скрипта через 3 секунды...', -1)
         end
 
-        wait(1000)
+        wait(3000)
+
+        -- Удаляем временные файлы только после полной записи и проверки.
+        os.remove(updateScriptPath)
+        os.remove(backupPath)
+
+        wait(500)
         thisScript():reload()
     end)
 end
@@ -706,6 +745,20 @@ local function checkForUpdates(manual, installAfterCheck)
 
                 if manual and isSampAvailable() then
                     sampAddChatMessage('[M-AIM] Не удалось проверить обновление: ' .. tostring(reason) .. '.', -1)
+                end
+                return
+            end
+
+            local syntaxOk, syntaxError = validLuaSyntax(updateScriptPath)
+            if not syntaxOk then
+                os.remove(updateScriptPath)
+                updateAvailable = false
+                downloadedUpdateReady = false
+                updateStatusText = 'Ошибка Lua в обновлении'
+
+                if isSampAvailable() then
+                    sampAddChatMessage('[M-AIM] Новая версия содержит ошибку Lua и не будет установлена.', -1)
+                    sampAddChatMessage('[M-AIM] ' .. tostring(syntaxError), -1)
                 end
                 return
             end
