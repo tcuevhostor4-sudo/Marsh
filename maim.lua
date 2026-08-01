@@ -7,9 +7,9 @@ local dlstatus = require('moonloader').download_status
 
 script_name('M-AIM')
 script_author('Pashenkov')
-script_version('1.2.7')
+script_version('1.2.8')
 
-local CURRENT_VERSION = '1.2.7'
+local CURRENT_VERSION = '1.2.8'
 local SCRIPT_URL = 'https://raw.githubusercontent.com/tcuevhostor4-sudo/Marsh/main/maim.lua'
 
 local cfgDir = getWorkingDirectory() .. '\\config'
@@ -123,6 +123,7 @@ local liquidResetKeyWasDown = false
 local whitelistToggleKeyWasDown = false
 local whitelistNotifications = imgui.ImBool(true)
 local autoCheckUpdates = imgui.ImBool(true)
+local updateNotifications = imgui.ImBool(true)
 local updateChecking = false
 local updateDownloading = false
 local updateAvailable = false
@@ -298,6 +299,7 @@ local function saveCfg()
     file:write('whitelist_toggle_key=' .. tostring(whitelistToggleKey) .. '\n')
     file:write('whitelist_notifications=' .. tostring(whitelistNotifications.v) .. '\n')
     file:write('auto_check_updates=' .. tostring(autoCheckUpdates.v) .. '\n')
+    file:write('update_notifications=' .. tostring(updateNotifications.v) .. '\n')
     for _, id in ipairs({24, 107, 103, 76}) do
         local p = gunCfg[id]
         local prefix = 'weapon' .. tostring(id) .. '_'
@@ -381,6 +383,8 @@ local function loadCfg()
                 whitelistNotifications.v = value == 'true'
             elseif name == 'auto_check_updates' then
                 autoCheckUpdates.v = value == 'true'
+            elseif name == 'update_notifications' then
+                updateNotifications.v = value == 'true'
             else
                 local otherField = name:match('^weapon_other_(.+)$')
                 if otherField then
@@ -485,8 +489,14 @@ local function updateLog(message)
     message = tostring(message or '')
     print('[M-AIM UPDATE] ' .. message)
 
-    if isSampAvailable() then
+    if updateNotifications.v and isSampAvailable() then
         sampAddChatMessage('[M-AIM] ' .. message, -1)
+    end
+end
+
+local function updateChat(message)
+    if updateNotifications.v and isSampAvailable() then
+        sampAddChatMessage(message, -1)
     end
 end
 
@@ -658,7 +668,7 @@ installDownloadedUpdate = function()
             os.remove(updateScriptPath)
 
             if isSampAvailable() then
-                sampAddChatMessage('[M-AIM] Обновление отменено: ' .. tostring(reason) .. '.', -1)
+                updateChat('[M-AIM] Обновление отменено: ' .. tostring(reason) .. '.', -1)
             end
             return
         end
@@ -670,7 +680,7 @@ installDownloadedUpdate = function()
         if not currentData then
             updateLog('Не удалось прочитать текущий maim.lua.')
             updateDownloading = false
-            sampAddChatMessage('[M-AIM] Не удалось прочитать текущий файл.', -1)
+            updateChat('[M-AIM] Не удалось прочитать текущий файл.', -1)
             return
         end
 
@@ -679,7 +689,7 @@ installDownloadedUpdate = function()
         if not writeBinaryFile(backupPath, currentData) then
             updateLog('Не удалось создать резервную копию.')
             updateDownloading = false
-            sampAddChatMessage('[M-AIM] Не удалось создать резервную копию.', -1)
+            updateChat('[M-AIM] Не удалось создать резервную копию.', -1)
             return
         end
 
@@ -688,7 +698,7 @@ installDownloadedUpdate = function()
         if not writeBinaryFile(currentPath, downloadedData) then
             writeBinaryFile(currentPath, currentData)
             updateDownloading = false
-            sampAddChatMessage('[M-AIM] Ошибка записи. Старый файл восстановлен.', -1)
+            updateChat('[M-AIM] Ошибка записи. Старый файл восстановлен.', -1)
             return
         end
 
@@ -702,7 +712,7 @@ installDownloadedUpdate = function()
             downloadedUpdateReady = false
             forcedUpdateWindow.v = false
 
-            sampAddChatMessage(
+            updateChat(
                 '[M-AIM] Новая версия не прошла проверку: ' ..
                 tostring(installedReason) .. '. Старый файл восстановлен.',
                 -1
@@ -720,7 +730,7 @@ installDownloadedUpdate = function()
         imgui.Process = false
 
         if isSampAvailable() then
-            sampAddChatMessage(
+            updateChat(
                 '[M-AIM] Обновление до версии ' .. tostring(remoteVersion) ..
                 ' установлено. Перезапуск...',
                 -1
@@ -1026,7 +1036,7 @@ function main()
             tostring(cbz7.v),
             tostring(cbz8.v),
             tostring(cbz9.v),
-            chatCommand, tostring(holdKey), tostring(activationToggleMode.v), tostring(activationToggled), tostring(menuKey1), tostring(menuKey2), tostring(liquidResetKey), tostring(whitelistToggleKey), tostring(whitelistNotifications.v), tostring(autoCheckUpdates.v)
+            chatCommand, tostring(holdKey), tostring(activationToggleMode.v), tostring(activationToggled), tostring(menuKey1), tostring(menuKey2), tostring(liquidResetKey), tostring(whitelistToggleKey), tostring(whitelistNotifications.v), tostring(autoCheckUpdates.v), tostring(updateNotifications.v)
         }, '|')
 
         if cfgState ~= oldCfgState then
@@ -1039,8 +1049,8 @@ end
 function imgui.OnDrawFrame()
     if not windows.v then return end
 
-    imgui.SetNextWindowPos(imgui.ImVec2(175.0, 135.0), imgui.Cond.FirstUseEver)
-    imgui.SetNextWindowSize(imgui.ImVec2(980.0, 690.0), imgui.Cond.FirstUseEver)
+    imgui.SetNextWindowPos(imgui.ImVec2(90.0, 70.0), imgui.Cond.FirstUseEver)
+    imgui.SetNextWindowSize(imgui.ImVec2(1120.0, 735.0), imgui.Cond.FirstUseEver)
 
     local flags = imgui.WindowFlags.NoResize + imgui.WindowFlags.NoCollapse + imgui.WindowFlags.ShowBorders
     imgui.Begin(u8('M-AIM  |  НОВОЕ'), windows, flags)
@@ -1079,7 +1089,7 @@ function imgui.OnDrawFrame()
 
     imgui.Dummy(imgui.ImVec2(0, 8))
 
-    imgui.BeginChild('Left', imgui.ImVec2(305, 500), true)
+    imgui.BeginChild('Left', imgui.ImVec2(305, 545), true)
     imgui.Text(u8('НАВЕДЕНИЕ'))
     imgui.Separator()
     imgui.Dummy(imgui.ImVec2(0, 8))
@@ -1127,7 +1137,7 @@ function imgui.OnDrawFrame()
 
     imgui.SameLine()
 
-    imgui.BeginChild('Center', imgui.ImVec2(300, 500), true)
+    imgui.BeginChild('Center', imgui.ImVec2(350, 545), true)
     imgui.Text(u8('ПРОФИЛИ ОРУЖИЯ'))
     imgui.Separator()
     imgui.TextDisabled(u8('Активный: ') .. u8(profileName))
@@ -1140,34 +1150,34 @@ function imgui.OnDrawFrame()
     tooltip('После попадания удерживает эту цель две секунды.')
     imgui.Dummy(imgui.ImVec2(0, 6))
 
-    if imgui.Button(u8('DEAGLE  24/31'), imgui.ImVec2(134, 34)) then
+    if imgui.Button(u8('DEAGLE  24/31'), imgui.ImVec2(159, 32)) then
         editProfile = 24
         profileName = profileLabels[24]
         loadGunCfg(24)
     end
     tooltip('Открывает настройки профиля DEAGLE для ID 24 и 31.')
     imgui.SameLine()
-    if imgui.Button(u8('M4  107/108'), imgui.ImVec2(134, 34)) then
+    if imgui.Button(u8('M4  107/108'), imgui.ImVec2(159, 32)) then
         editProfile = 107
         profileName = profileLabels[107]
         loadGunCfg(107)
     end
     tooltip('Открывает настройки профиля M4 для ID 107 и 108.')
-    if imgui.Button(u8('UZI  103/104'), imgui.ImVec2(134, 34)) then
+    if imgui.Button(u8('UZI  103/104'), imgui.ImVec2(159, 32)) then
         editProfile = 103
         profileName = profileLabels[103]
         loadGunCfg(103)
     end
     tooltip('Открывает настройки профиля UZI для ID 103 и 104.')
     imgui.SameLine()
-    if imgui.Button(u8('БИТА  76/5'), imgui.ImVec2(134, 34)) then
+    if imgui.Button(u8('БИТА  76/5'), imgui.ImVec2(159, 32)) then
         editProfile = 76
         profileName = profileLabels[76]
         loadGunCfg(76)
     end
     tooltip('Открывает настройки профиля биты для ID 76 и 5.')
     imgui.Dummy(imgui.ImVec2(0, 8))
-    if imgui.Button(u8('СОХРАНИТЬ ПРОФИЛЬ'), imgui.ImVec2(-1, 36)) then
+    if imgui.Button(u8('СОХРАНИТЬ ПРОФИЛЬ'), imgui.ImVec2(-1, 32)) then
         saveGunCfg(editProfile)
     end
     tooltip('Сохраняет настройки выбранного профиля оружия.')
@@ -1181,7 +1191,7 @@ function imgui.OnDrawFrame()
     imgui.Dummy(imgui.ImVec2(0, 12))
     imgui.Text(u8('УПРАВЛЕНИЕ'))
     imgui.Separator()
-    imgui.PushItemWidth(145)
+    imgui.PushItemWidth(175)
     imgui.InputText(u8('Команда##cmd'), commandInput)
     tooltip('Команда для открытия меню через чат.')
     imgui.InputText(u8('Активация##hold'), holdKeyInput)
@@ -1205,8 +1215,12 @@ function imgui.OnDrawFrame()
         saveCfg()
     end
     tooltip('Автоматически проверяет наличие новой версии при запуске.')
+    if imgui.Checkbox(u8('Сообщения обновления'), updateNotifications) then
+        saveCfg()
+    end
+    tooltip('Показывает в чате сообщения о проверке, загрузке и установке обновлений.')
 
-    if imgui.Button(u8('ПРИМЕНИТЬ УПРАВЛЕНИЕ'), imgui.ImVec2(-1, 34)) then
+    if imgui.Button(u8('ПРИМЕНИТЬ УПРАВЛЕНИЕ'), imgui.ImVec2(-1, 32)) then
         chatCommand = trim(u8:decode(commandInput.v)):gsub('^/', ''):lower()
         if chatCommand == '' then chatCommand = 'maim' end
         holdKey = keyCode(u8:decode(holdKeyInput.v), holdKey)
@@ -1235,7 +1249,7 @@ function imgui.OnDrawFrame()
 
     imgui.SameLine()
 
-    imgui.BeginChild('Right', imgui.ImVec2(0, 500), true)
+    imgui.BeginChild('Right', imgui.ImVec2(0, 545), true)
     imgui.Text(u8('БЕЛЫЙ СПИСОК'))
     imgui.SameLine(210)
     imgui.TextDisabled(tostring(activeCount))
@@ -1254,7 +1268,7 @@ function imgui.OnDrawFrame()
     tooltip('Добавляет введённый ник в белый список.')
 
     imgui.Dummy(imgui.ImVec2(0, 7))
-    imgui.BeginChild('WhitelistList', imgui.ImVec2(0, 370), true)
+    imgui.BeginChild('WhitelistList', imgui.ImVec2(0, 410), true)
     local names = {}
     for _, nick in pairs(whitelist) do names[#names + 1] = nick end
     table.sort(names, function(a, b) return a:lower() < b:lower() end)
