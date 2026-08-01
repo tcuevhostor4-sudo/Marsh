@@ -6,7 +6,7 @@ local sampev = require('lib.samp.events')
 local dlstatus = require('moonloader').download_status
 
 script_name('M-AIM')
-script_author('Pashenkov')
+script_author('M-NaPamPah')
 script_version('1.2.11')
 
 local CURRENT_VERSION = '1.2.11'
@@ -1298,12 +1298,12 @@ function imgui.OnDrawFrame()
     imgui.EndChild()
 
     imgui.Separator()
-    local authorText = u8('Автор: @pashenkov тг')
+    local authorText = u8('Автор: @M-NaPamPah тг')
     local authorWidth = imgui.CalcTextSize(authorText).x
     imgui.SetCursorPosX((imgui.GetWindowWidth() - authorWidth) / 2)
     imgui.Text(authorText)
     if imgui.IsItemClicked() then
-        os.execute('start "" "https://t.me/pashenkov"')
+        os.execute('start "" "https://t.me/wiokyrov"')
     end
     if imgui.IsItemHovered() then
         imgui.SetTooltip(u8('Открыть Telegram'))
