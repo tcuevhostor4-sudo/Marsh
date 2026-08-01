@@ -8,9 +8,9 @@ local dlstatus = require('moonloader').download_status
 
 script_name('M-AIM')
 script_author('Pashenkov')
-script_version('1.0.6')
+script_version('1.0.5')
 
-local CURRENT_VERSION = '1.0.6'
+local CURRENT_VERSION = '1.0.5'
 local VERSION_URL = 'https://raw.githubusercontent.com/tcuevhostor4-sudo/Marsh/main/version.txt'
 local SCRIPT_URL = 'https://raw.githubusercontent.com/tcuevhostor4-sudo/Marsh/main/maim.lua'
 
@@ -691,12 +691,17 @@ function main()
     registerMenuCommand()
 
     lua_thread.create(MAIM)
-    if autoCheckUpdates.v then
-        lua_thread.create(function()
-            wait(1500)
-            checkForUpdates(false)
-        end)
-    end
+
+    -- Проверяем обновления не только при запуске, но и во время игры.
+    lua_thread.create(function()
+        wait(1500)
+        while true do
+            if autoCheckUpdates.v then
+                checkForUpdates(false)
+            end
+            wait(60000) -- раз в 60 секунд
+        end
+    end)
 
     local menuPressed = false
     local oldCfgState = ''
