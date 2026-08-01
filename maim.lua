@@ -1038,7 +1038,7 @@ function imgui.OnDrawFrame()
     imgui.SetNextWindowSize(imgui.ImVec2(1120.0, 735.0), imgui.Cond.FirstUseEver)
 
     local flags = imgui.WindowFlags.NoResize + imgui.WindowFlags.NoCollapse + imgui.WindowFlags.ShowBorders
-    imgui.Begin(u8('M-AIM  |  НОВОЕ'), windows, flags)
+    imgui.Begin(u8('M-AIM  | Спасибо милфе за такой чит'), windows, flags)
 
     local holdActive = activationActive()
     local activeCount = 0
