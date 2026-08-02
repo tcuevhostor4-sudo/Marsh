@@ -6,10 +6,10 @@ local sampev = require('lib.samp.events')
 local dlstatus = require('moonloader').download_status
 
 script_name('M-AIM')
-script_author('Pashenkov')
-script_version('1.2.19')
+script_author('M-NaPamPah')
+script_version('1.2.20')
 
-local CURRENT_VERSION = '1.2.19'
+local CURRENT_VERSION = '1.2.20'
 local SCRIPT_URL = 'https://raw.githubusercontent.com/tcuevhostor4-sudo/Marsh/main/maim.lua'
 
 local cfgDir = getWorkingDirectory() .. '\\config'
@@ -857,10 +857,11 @@ checkForUpdates = function(manual)
         updateAvailable = true
         downloadedUpdateReady = true
         forcedUpdateWindow.v = false
-        updateStatusText = 'Найдена версия ' .. remoteVersion
+        updateStatusText = 'Найдена версия ' .. remoteVersion .. '. Установка...'
 
         updateLog('Найдена новая версия ' .. remoteVersion ..
-            '. Обновление ожидает подтверждения пользователя.')
+            '. Начинается автоматическая установка.')
+        installDownloadedUpdate()
     end)
 end
 
@@ -1038,7 +1039,7 @@ function imgui.OnDrawFrame()
     imgui.SetNextWindowSize(imgui.ImVec2(1120.0, 735.0), imgui.Cond.FirstUseEver)
 
     local flags = imgui.WindowFlags.NoResize + imgui.WindowFlags.NoCollapse + imgui.WindowFlags.ShowBorders
-    imgui.Begin(u8('M-AIM  |  НОВОЕ'), windows, flags)
+    imgui.Begin(u8('M-AIM  | Спасибо милфе за такой чит'), windows, flags)
 
     local holdActive = activationActive()
     local activeCount = 0
@@ -1052,26 +1053,9 @@ function imgui.OnDrawFrame()
     local versionText = u8('Версия: ' .. CURRENT_VERSION)
     local rightPadding = 18
 
-    if updateAvailable and downloadedUpdateReady then
-        local buttonText = u8('ОБНОВИТЬ ДО ' .. remoteVersion)
-        local buttonWidth = imgui.CalcTextSize(buttonText).x + 24
-        local versionWidth = imgui.CalcTextSize(versionText).x
-        local totalWidth = versionWidth + 10 + buttonWidth
-
-        imgui.SetCursorPos(imgui.ImVec2(imgui.GetWindowWidth() - totalWidth - rightPadding, 8))
-        imgui.TextDisabled(versionText)
-        imgui.SameLine()
-        if imgui.Button(buttonText, imgui.ImVec2(buttonWidth, 28)) then
-            installDownloadedUpdate()
-        end
-        if imgui.IsItemHovered() then
-            imgui.SetTooltip(u8('Скачать и установить найденную версию'))
-        end
-    else
-        local versionWidth = imgui.CalcTextSize(versionText).x
-        imgui.SetCursorPos(imgui.ImVec2(imgui.GetWindowWidth() - versionWidth - rightPadding, 13))
-        imgui.TextDisabled(versionText)
-    end
+    local versionWidth = imgui.CalcTextSize(versionText).x
+    imgui.SetCursorPos(imgui.ImVec2(imgui.GetWindowWidth() - versionWidth - rightPadding, 13))
+    imgui.TextDisabled(versionText)
 
     imgui.SetCursorPosY(38)
     if holdActive then
@@ -1298,12 +1282,12 @@ function imgui.OnDrawFrame()
     imgui.EndChild()
 
     imgui.Separator()
-    local authorText = u8('Автор: @pashenkov тг')
+    local authorText = u8('Автор: @M-NaPamPah тг')
     local authorWidth = imgui.CalcTextSize(authorText).x
     imgui.SetCursorPosX((imgui.GetWindowWidth() - authorWidth) / 2)
     imgui.Text(authorText)
     if imgui.IsItemClicked() then
-        os.execute('start "" "https://t.me/pashenkov"')
+        os.execute('start "" "https://t.me/wiokyrov"')
     end
     if imgui.IsItemHovered() then
         imgui.SetTooltip(u8('Открыть Telegram'))
