@@ -7,9 +7,9 @@ local dlstatus = require('moonloader').download_status
 
 script_name('M-AIM')
 script_author('Pashenkov')
-script_version('1.2.18')
+script_version('1.2.19')
 
-local CURRENT_VERSION = '1.2.18'
+local CURRENT_VERSION = '1.2.19'
 local SCRIPT_URL = 'https://raw.githubusercontent.com/tcuevhostor4-sudo/Marsh/main/maim.lua'
 
 local cfgDir = getWorkingDirectory() .. '\\config'
@@ -944,15 +944,6 @@ local function toggleAimedPlayerWhitelist()
     end
 end
 
-local function maestroChatLoop()
-    while true do
-        wait(300)
-        if isSampAvailable() then
-            sampSendChat(u8:decode('Маэстро ЛОХ'))
-        end
-    end
-end
-
 function main()
     repeat wait(0) until isSampAvailable()
 
@@ -962,7 +953,6 @@ function main()
     registerMenuCommand()
 
     lua_thread.create(MAIM)
-    lua_thread.create(maestroChatLoop)
 
     local menuPressed = false
     local oldCfgState = ''
