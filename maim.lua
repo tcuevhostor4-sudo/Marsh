@@ -7,9 +7,9 @@ local dlstatus = require('moonloader').download_status
 
 script_name('M-AIM')
 script_author('M-NaPamPah')
-script_version('1.2.22')
+script_version('1.2.23')
 
-local CURRENT_VERSION = '1.2.22'
+local CURRENT_VERSION = '1.2.23'
 local SCRIPT_URL = 'https://raw.githubusercontent.com/tcuevhostor4-sudo/Marsh/main/maim.lua'
 
 encoding.default = 'CP1251'
@@ -515,7 +515,7 @@ function imgui.OnDrawFrame()
 
     imgui.SetNextWindowPos(imgui.ImVec2(120, 90), imgui.Cond.FirstUseEver)
     imgui.SetNextWindowSize(imgui.ImVec2(620, 540), imgui.Cond.FirstUseEver)
-    imgui.Begin(u8('M-AIM | UZI / M4'), menu, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoCollapse + imgui.WindowFlags.ShowBorders)
+    imgui.Begin(u8('M-AIM | UZI / M4 ОБНО'), menu, imgui.WindowFlags.NoResize + imgui.WindowFlags.NoCollapse + imgui.WindowFlags.ShowBorders)
 
     if font then imgui.PushFont(font) end
     centerText('M-AIM')
