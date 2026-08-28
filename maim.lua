@@ -7,9 +7,9 @@ local dlstatus = require('moonloader').download_status
 
 script_name('M-AIM')
 script_author('M-NaPamPah')
-script_version('1.2.21')
+script_version('1.2.22')
 
-local CURRENT_VERSION = '1.2.21'
+local CURRENT_VERSION = '1.2.22'
 local SCRIPT_URL = 'https://raw.githubusercontent.com/tcuevhostor4-sudo/Marsh/main/maim.lua'
 
 encoding.default = 'CP1251'
@@ -33,12 +33,12 @@ local keyInput = imgui.ImBuffer(16)
 local font
 
 local profiles = {
-    [103] = { name = 'UZI 103/104', speed = 10, dist = 20, fov = 15, bone = 8, wall = true },
+    [103] = { name = 'UZI 28/103/104', speed = 10, dist = 20, fov = 15, bone = 8, wall = true },
     [107] = { name = 'M4 107/108',  speed = 10, dist = 20, fov = 15, bone = 8, wall = true }
 }
 
 local weaponProfile = {
-    [103] = 103, [104] = 103,
+    [28] = 103, [103] = 103, [104] = 103,
     [107] = 107, [108] = 107
 }
 
